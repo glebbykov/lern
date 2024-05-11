@@ -23,7 +23,7 @@
 Добавьте пользователя `support` в группу `sshusers`, чтобы он мог использовать SSH:
 
    ```bash
-   sudo usermod -aG sshusers support
+   sudo usermod -aG sudo support
    ```
 
 ## Шаг 4: Генерация и установка пароля для пользователя `support`
