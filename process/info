@@ -1,4 +1,4 @@
-#Process Linux
-##Zombie
+# Process Linux
+## Zombie
 ulimit -u  # показывает максимальное число процессов для текущего пользователя
 cat /proc/sys/kernel/pid_max  # показывает максимально возможный номер PID в системе
