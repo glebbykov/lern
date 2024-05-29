@@ -1,4 +1,8 @@
 Process Linux
   Zombie
+    sudo apt install build-essential
+    gcc zombie_creator.c -o zombie_creator
+    ./zombie_creator.sh 
     ulimit -u  # показывает максимальное число процессов для текущего пользователя
     cat /proc/sys/kernel/pid_max  # показывает максимально возможный номер PID в системе
+  
