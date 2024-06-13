@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+import os
+import time
+import argparse
+from multiprocessing import Process
+
+def cpu_load(duration):
+    """Функция для создания нагрузки на CPU"""
+    end_time = time.time() + duration
+    while time.time() < end_time:
+        pass  # Бесконечный цикл для нагрузки на CPU
+
+def create_processes(num_processes, duration):
+    processes = []
+    for _ in range(num_processes):
+        p = Process(target=cpu_load, args=(duration,))
+        p.start()
+        processes.append(p)
+    
+    for p in processes:
+        p.join()
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Create CPU load by spawning processes.")
+    parser.add_argument('-p', '--processes', type=int, default=os.cpu_count() * 2, help='Number of processes to spawn')
+    parser.add_argument('-d', '--duration', type=int, default=600, help='Duration to run the CPU load (in seconds)')
+    
+    args = parser.parse_args()
+
+    num_processes = args.processes
+    duration = args.duration
+    
+    print(f"Starting {num_processes} processes to create CPU load for {duration} seconds")
+    create_processes(num_processes, duration)
+    print("CPU load complete.")
