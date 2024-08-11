@@ -15,9 +15,9 @@ perform_task() {
     echo "$name завершен. Время выполнения: $((end_time - start_time)) секунд."
 }
 
-nice -n 10 bash -c "$(declare -f perform_task); perform_task 'Процесс с низким  приоритетом ' 9000000" &
+nice -n 10 bash -c "$(declare -f perform_task); perform_task 'Процесс с низким  приоритетом ' 4000000" &
 
-nice -n -10 bash -c "$(declare -f perform_task); perform_task 'Процесс с высоким приоритетом' 9000000" &
+nice -n -10 bash -c "$(declare -f perform_task); perform_task 'Процесс с высоким приоритетом' 4000000" &
 
 wait
 echo "Все процессы завершены."
