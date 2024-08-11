@@ -1,0 +1,2 @@
+PARAM1="initial_value1"
+PARAM2="initial_value2"
