@@ -1,14 +1,18 @@
 #!/bin/bash
 
+# Файл лога
+LOGFILE="/var/log/zombie_killer.log"
+
 # Поиск всех зомби-процессов
 zombie_pids=$(ps axo stat,pid | awk '$1 ~ /Z/ {print $2}')
 
 if [ -z "$zombie_pids" ]; then
-  echo "[$(date)] Нет зомби-процессов." >> /var/log/zombie_killer.log
+  echo "[$(date)] Нет зомби-процессов." >> $LOGFILE
 else
   for pid in $zombie_pids; do
     parent_pid=$(ps -o ppid= -p "$pid")
-    echo "[$(date)] Обнаружен зомби-процесс PID $pid. Завершаем родительский процесс PID $parent_pid." >> /var/log/zombie_killer.log
+    echo "[$(date)] Обнаружен зомби-процесс PID $pid. Завершаем родительский процесс PID $parent_pid." >> $LOGFILE
+    echo "[$(date)] Убиваем PID $pid и его родительский процесс PID $parent_pid." >> $LOGFILE
     kill -9 $parent_pid
   done
 fi
