@@ -12,7 +12,15 @@ else
   for pid in $zombie_pids; do
     parent_pid=$(ps -o ppid= -p "$pid")
     echo "[$(date)] Обнаружен зомби-процесс PID $pid. Завершаем родительский процесс PID $parent_pid." >> $LOGFILE
-    echo "[$(date)] Убиваем PID $pid и его родительский процесс PID $parent_pid." >> $LOGFILE
+    
+    # Убиваем родительский процесс
     kill -9 $parent_pid
+    
+    # Проверяем, убит ли процесс
+    if [ $? -eq 0 ]; then
+      echo "[$(date)] Успешно убит зомби-процесс PID $pid и его родительский процесс PID $parent_pid." >> $LOGFILE
+    else
+      echo "[$(date)] Ошибка при попытке убить родительский процесс PID $parent_pid для зомби-процесса PID $pid." >> $LOGFILE
+    fi
   done
 fi
