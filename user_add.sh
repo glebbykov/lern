@@ -1,13 +1,18 @@
 #!/bin/bash
 
-if [ $# -ne 2 ]; then
-    echo "Usage: $0 <username> <password>"
+if [ $# -ne 1 ]; then
+    echo "Usage: $0 <file>"
     exit 1
 fi
 
-# Assign the arguments to variables
-USERNAME=$1
-PASSWORD=$2
+FILE=$1
+if [ ! -f $FILE ]; then
+    echo "File not found!"
+    exit 1
+fi
+
+USERNAME=$(sed -n '1p' $FILE)
+PASSWORD=$(sed -n '2p' $FILE)
 
 useradd -m -s /bin/bash $USERNAME
 
