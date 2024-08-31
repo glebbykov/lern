@@ -1,0 +1,9 @@
+1. Создайте файл greeting.txt и запишите в него строку "Welcome to our system!" с использованием команды echo и оператора >
+
+2. Добавьте строку "Have a great day!" в файл greeting.txt с использованием команды echo и оператора >>.
+
+3. Создайте файл daily_notes.txt и запишите в него строку "Today's notes:".
+
+4. Добавьте строку "Meeting at 10 AM." в файл daily_notes.txt.
+
+5. Создайте файл tasks.txt и запишите в него строку "Tasks for today:". Затем добавьте строки "1. Finish the report" и "2. Email the client" в этот файл.

@@ -1,0 +1,16 @@
+1. The Linux kernel is the core of the Linux operating system.
+2. Ядро Linux — это основа операционной системы Linux.
+3. It manages system resources and communication between hardware and software.
+4. Оно управляет системными ресурсами и взаимодействием между оборудованием и программным обеспечением.
+5. The kernel handles processes, memory, and peripheral devices.
+6. Ядро обрабатывает процессы, память и периферийные устройства.
+7. It provides the necessary drivers for different types of hardware.
+8. Оно предоставляет необходимые драйверы для различных типов оборудования.
+9. The Linux kernel is open source and developed collaboratively.
+10. Ядро Linux является открытым исходным кодом и разрабатывается совместно.
+11. It supports a wide range of platforms and architectures.
+12. Оно поддерживает широкий спектр платформ и архитектур.
+13. The kernel is responsible for system security and stability.
+14. Ядро отвечает за безопасность и стабильность системы.
+15. Kernel updates often include improvements and new features.
+16. Обновления ядра часто включают улучшения и новые функции.

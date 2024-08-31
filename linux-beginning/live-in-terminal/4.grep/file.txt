@@ -1,0 +1,16 @@
+This is a test line.
+Here we have the word Pattern in mixed case.
+Another line without the word.
+PATTERN appears here in uppercase.
+pattern is here in lowercase.
+Some lines do not contain the keyword.
+Look for the word PaTtErN in different cases.
+We can see how Pattern appears.
+No pattern in this line.
+The pattern should be found regardless of case.
+Let's see if it finds the word PATtern here.
+The quick brown fox jumps over the lazy dog.
+Patterns are everywhere.
+There is a PATTERN to everything.
+pattern matching is important in text processing.
+Not every line will have the keyword.

@@ -1,0 +1,10 @@
+1. Создайте файл hello.txt и запишите в него строку "Hello, World!" с использованием команды echo и оператора >.
+
+2. Добавьте строку "How are you today?" в файл hello.txt с использованием команды echo и оператора >>.
+
+3. Создайте файл info.txt и запишите в него строку "This is some information."
+
+4. Добавьте строку "Additional information here." в файл info.txt.
+
+5. Используйте команду echo для записи строки "This is the beginning of the log." в файл log.txt.
+
