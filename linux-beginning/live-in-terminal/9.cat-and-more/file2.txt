@@ -1,0 +1,3 @@
+This is the content of file2.txt.
+This file contains some important data.
+Together with file1.txt, it will be combined into a new file.

@@ -1,0 +1,2 @@
+These are the notes for the project.
+Please read them carefully and implement accordingly.

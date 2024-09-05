@@ -13,8 +13,8 @@ mv old_name.txt new_name.txt
 Переименовывает файл old_name.txt в new_name.txt.
 Примеры использования
 Копирование файла:
-
 cp file1.txt file2.txt
+
 Копирование директории рекурсивно:
 
 cp -r folder1 folder2
