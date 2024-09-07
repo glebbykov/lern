@@ -1,6 +1,6 @@
 # Инструкция кластер k8s через kubeadm
 
-## 1 Controle plain 1 Worker (yac debian12)
+## 1 Controle plain 1 Worker (yandex.cloud debian12)
 
 ### Controle plain
 
