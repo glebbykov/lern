@@ -165,7 +165,7 @@ kubeadm join 10.130.0.10:6443 --token bjm5jo.nak9kc6lsljurn1a \
 ```bash
 mkdir -p $HOME/.kube
 sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
-sudo chown $(id -u):$(id -g) $HOME/.kube/config
+sudo chown $(id -u):$(id -g) /etc/kubernetes/admin.conf
 export KUBECONFIG=/etc/kubernetes/admin.conf
 ```
 
