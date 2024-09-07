@@ -123,8 +123,8 @@ net.ipv4.ip_forward=1
 Примените изменения:
 
 ```bash
-Копировать код
 sudo sysctl -p
+```
 
 16.
 
@@ -153,6 +153,7 @@ cgroupDriver: systemd
 ```bash
 sudo kubeadm init --config kubeadm-config.yaml
 ```
+
 сохранить вывод комнады типа 
 
 ```
@@ -214,7 +215,21 @@ curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o 
 echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
 ```
 
-25.
+25. 
+
+```bash
+curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+```
+
+26.
+
+```bash
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
+  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+```
+
+27.
 
 ```bash
 sudo apt-get update
@@ -222,7 +237,74 @@ sudo apt-get install -y kubelet kubeadm kubectl
 sudo apt-mark hold kubelet kubeadm kubectl
 ```
 
-26.
+28. 
+
+```bash
+sudo apt-get update
+sudo apt-get install -y containerd.io
+```
+
+29.
+
+```bash
+sudo mkdir -p /etc/containerd
+sudo containerd config default | sudo tee /etc/containerd/config.toml
+```
+
+30.
+
+```bash
+sudo vi /etc/containerd/config.toml
+```
+
+```toml
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+  SystemdCgroup = true
+```
+
+31.
+
+```bash
+sudo systemctl restart containerd
+```
+
+32.
+
+```bash
+sudo systemctl status containerd
+```
+
+33. Проверьте текущее значение ip_forward:
+
+```bash
+cat /proc/sys/net/ipv4/ip_forward
+```
+
+Если вывод — 0, это означает, что маршрутизация не включена.
+
+Чтобы временно включить пересылку IPv4, выполните следующую команду:
+
+```bash
+sudo sysctl -w net.ipv4.ip_forward=1
+```
+Чтобы сделать это изменение постоянным (чтобы оно сохранялось после перезагрузки), добавьте или измените строку в файле /etc/sysctl.conf:
+
+```bash
+sudo vi /etc/sysctl.conf
+```
+
+Найдите или добавьте строку:
+
+```bash
+net.ipv4.ip_forward=1
+```
+Примените изменения:
+
+```bash
+sudo sysctl -p
+```
+
+34.
 
 ```bash
 sudo kubeadm join 10.130.0.10:6443 --token <ваш токен см. пункт 17> \
