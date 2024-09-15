@@ -28,10 +28,16 @@
     ```bash
     sudo mkdir /sys/fs/cgroup/io_limit_group
     ```
+    
+Добавьте подсистему io.max если она не присутвует
+
+    ```bash
+    echo "+io" | sudo tee /sys/fs/cgroup/cgroup.subtree_control
+    ```
 
 2. Установите ограничение на запись для диска. Например, для диска `sda` с идентификатором `8:0` ограничим запись до 1 MB/с:
     ```bash
-    echo "8:0 wbps=1048576" | sudo tee /sys/fs/cgroup/io_limit_group/io.max
+    echo "8:0 wbps=1048576" | sudo tee /sys/fs/cgroup/io_limit_group/
     ```
 
 3. Проверьте, что ограничение было установлено:
