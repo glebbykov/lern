@@ -228,7 +228,7 @@ echo \
 ```bash
 sudo apt-get update
 sudo apt-get install -y kubelet kubeadm kubectl
-sudo apt-mark hold kubelet kubeadm
+sudo apt-mark hold kubelet kubeadm kubectl
 ```
 
 28. Устанавливаем containerd на воркер-узле
