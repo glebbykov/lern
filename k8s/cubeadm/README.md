@@ -194,7 +194,7 @@ kubeadm token list
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y ca-certificates curl gnupg lsb-release
+sudo apt-get install -y apt-transport-https ca-certificates curl gpg gnupg lsb-release
 ```
 
 23. Создаем директорию для хранения ключей APT
@@ -203,19 +203,31 @@ sudo apt-get install -y ca-certificates curl gnupg lsb-release
 sudo mkdir -p /etc/apt/keyrings
 ```
 
-24. Загружаем ключ для Docker репозитория
+24. Загружаем ключ для Kubernetes репозитория
 
 ```bash
-curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 ```
 
-25. Добавляем Kubernetes репозиторий на воркер-узле
+25. Добавляем Kubernetes репозиторий в систему
 
 ```bash
 echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
 ```
 
-26. Добавляем Docker репозиторий на воркер-узле
+26. Загружаем ключ для Docker репозитория
+
+```bash
+curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+```
+
+27. Добавляем Kubernetes репозиторий на воркер-узле
+
+```bash
+echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
+```
+
+28. Добавляем Docker репозиторий на воркер-узле
 
 ```bash
 echo \
@@ -223,7 +235,7 @@ echo \
   $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 ```
 
-27. Устанавливаем kubelet, kubeadm и kubectl на воркер-узле
+29. Устанавливаем kubelet, kubeadm и kubectl на воркер-узле
 
 ```bash
 sudo apt-get update
@@ -231,21 +243,21 @@ sudo apt-get install -y kubelet kubeadm kubectl
 sudo apt-mark hold kubelet kubeadm kubectl
 ```
 
-28. Устанавливаем containerd на воркер-узле
+30. Устанавливаем containerd на воркер-узле
 
 ```bash
 sudo apt-get update
 sudo apt-get install -y containerd.io
 ```
 
-29. Создаем конфигурацию containerd и генерируем её по умолчанию
+31. Создаем конфигурацию containerd и генерируем её по умолчанию
 
 ```bash
 sudo mkdir -p /etc/containerd
 sudo containerd config default | sudo tee /etc/containerd/config.toml
 ```
 
-30. Открываем конфигурацию containerd для редактирования и настраиваем использование systemd
+32. Открываем конфигурацию containerd для редактирования и настраиваем использование systemd
 
 ```bash
 sudo vi /etc/containerd/config.toml
@@ -256,19 +268,19 @@ sudo vi /etc/containerd/config.toml
   SystemdCgroup = true
 ```
 
-31. Перезапускаем containerd на воркер-узле
+33. Перезапускаем containerd на воркер-узле
 
 ```bash
 sudo systemctl restart containerd
 ```
 
-32. Проверяем статус containerd
+34. Проверяем статус containerd
 
 ```bash
 sudo systemctl status containerd
 ```
 
-33. Проверяем текущее значение ip_forward и включаем пересылку пакетов, если требуется
+35. Проверяем текущее значение ip_forward и включаем пересылку пакетов, если требуется
 
 ```bash
 cat /proc/sys/net/ipv4/ip_forward
@@ -298,7 +310,7 @@ net.ipv4.ip_forward=1
 sudo sysctl -p
 ```
 
-34. Присоединяем воркер-узел к кластеру с использованием команды из пункта 17
+36. Присоединяем воркер-узел к кластеру с использованием команды из пункта 17
 
 ```bash
 sudo kubeadm join <внутренний-ip-master>:6443 --token <ваш токен см. пункт 17> \
