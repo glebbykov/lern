@@ -182,10 +182,14 @@ kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
 kubectl get nodes
 ```
 
-21. Выводим список доступных токенов для присоединения воркер-узлов
+21. Выводим список доступных токенов для присоединения воркер-узлов или генерим новый
 
 ```bash
 kubeadm token list
+```
+```
+kubeadm join 10.130.0.10:6443 --token bjm5jo.nak9kc6lsljurn1a \
+        --discovery-token-ca-cert-hash sha256:fc19c923473ef55a006f8ff3767ccf011d504cebb49b06874fafe54552e442e4
 ```
 
 ### Worker
