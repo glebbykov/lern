@@ -301,6 +301,6 @@ sudo sysctl -p
 34. Присоединяем воркер-узел к кластеру с использованием команды из пункта 17
 
 ```bash
-sudo kubeadm join 10.130.0.10:6443 --token <ваш токен см. пункт 17> \
+sudo kubeadm join <внутренний-ip-master>:6443 --token <ваш токен см. пункт 17> \
     --discovery-token-ca-cert-hash sha256:<ваш hash см. пункт 17>
 ```
