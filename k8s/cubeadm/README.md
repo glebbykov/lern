@@ -256,13 +256,13 @@ sudo vi /etc/containerd/config.toml
   SystemdCgroup = true
 ```
 
-31. 
+31. Перезапускаем containerd на воркер-узле
 
 ```bash
 sudo systemctl restart containerd
 ```
 
-32. Перезапускаем containerd на воркер-узле
+32. Проверяем статус containerd
 
 ```bash
 sudo systemctl status containerd
