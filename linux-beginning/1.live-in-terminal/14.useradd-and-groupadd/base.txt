@@ -82,3 +82,7 @@ cat /etc/passwd
 посмотреть группы конеретного пользователя:
 
 id user1
+
+Удалить пользователя:
+
+sudo userdel username
