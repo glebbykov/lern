@@ -1,14 +1,15 @@
 1. Linux is an open-source operating system.
-2. Linux — это операционная система с открытым исходным кодом.
-3. It is known for its stability and security.
-4. Она известна своей стабильностью и безопасностью.
-5. Linux distributions are collections of software.
-6. Дистрибутивы Linux — это наборы программного обеспечения.
-7. These distributions include the Linux kernel.
-8. Эти дистрибутивы включают ядро Linux.
-9. Linux can be used on servers, desktops, and mobile devices.
-10. Linux можно использовать на серверах, настольных компьютерах и мобильных устройствах.
-11. Many developers contribute to Linux development.
-12. Многие разработчики участвуют в разработке Linux.
-13. Linux provides a powerful command line interface.
+2. It is known for its stability and security.
+3. Linux distributions are collections of software.
+4. These distributions include the Linux kernel.
+5. Linux can be used on servers, desktops, and mobile devices.
+6. Many developers contribute to Linux development.
+7. Linux provides a powerful command line interface.
+
+8. Linux — это операционная система с открытым исходным кодом.
+9. Она известна своей стабильностью и безопасностью.
+10. Дистрибутивы Linux — это наборы программного обеспечения.
+11. Эти дистрибутивы включают ядро Linux.
+12. Linux можно использовать на серверах, настольных компьютерах и мобильных устройствах.
+13. Многие разработчики участвуют в разработке Linux.
 14. Linux предоставляет мощный интерфейс командной строки.
