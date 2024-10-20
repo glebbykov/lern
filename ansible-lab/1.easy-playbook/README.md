@@ -66,12 +66,12 @@ server {
 ```html
 <html>
   <head>
-    <title>Добро пожаловать в Ansible</title>
+    <title>Welcome to Ansible</title>
   </head>
   <body>
-    <h1>Nginx настроен с помощью Ansible</h1>
-    <p>Если вы видите эту страницу, значит, Ansible успешно установил Nginx.</p>
-    <p>Запущен на {{ inventory_hostname }}</p>
+    <h1>Nginx is configured using Ansible</h1>
+    <p>If you see this page, it means Ansible has successfully installed Nginx.</p>
+    <p>Running on {{ inventory_hostname }}</p>
   </body>
 </html>
 ```
