@@ -144,6 +144,7 @@ mysql_password: "supersecretpassword"
 #### 4. Обновление контейнеров без остановки
 **Задание:**  
 Реализовать обновление NGINX контейнера без остановки работы сервиса с помощью Ansible.
+Простое решение с простоем:
 
 **Решение:**  
 ```yaml
@@ -163,6 +164,55 @@ mysql_password: "supersecretpassword"
         ports:
           - "8080:80"
 ```
+Сложное с поднятием дублирующего контейнера, но без простоя
+
+```yaml
+---
+- hosts: localhost
+  tasks:
+    - name: Start new NGINX container
+      community.docker.docker_container:
+        name: nginx_new
+        image: nginx:latest
+        state: started
+        recreate: true
+        restart: yes
+        networks:
+          - name: public_net
+          - name: private_net
+        ports:
+          - "8081:80"  # Временно запустить новый контейнер на другом порту
+        healthcheck:   # Проверка здоровья контейнера
+          test: ["CMD", "curl", "-f", "http://localhost:8081"]
+          interval: 30s
+          retries: 3
+          timeout: 10s
+
+    - name: Stop old NGINX container after new is healthy
+      community.docker.docker_container:
+        name: nginx_old
+        state: stopped
+        when: "'healthy' in docker_container_facts(name='nginx_new').json['State']['Health']['Status']"
+
+    - name: Remove old NGINX container
+      community.docker.docker_container:
+        name: nginx_old
+        state: absent
+
+    - name: Rename new NGINX container to replace the old one
+      community.docker.docker_container:
+        name: nginx
+        image: nginx:latest
+        state: started
+        recreate: true
+        restart: yes
+        networks:
+          - name: public_net
+          - name: private_net
+        ports:
+          - "8080:80"
+```
+
 
 ### Дополнительные задания:
 1. **Реализуйте мониторинг контейнеров:**  
