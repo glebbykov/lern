@@ -213,7 +213,6 @@ mysql_password: "supersecretpassword"
           - "8080:80"
 ```
 
-
 ### Дополнительные задания:
 1. **Реализуйте мониторинг контейнеров:**  
 Настройте Prometheus и Grafana с помощью Ansible для мониторинга состояния контейнеров NGINX и MySQL.
