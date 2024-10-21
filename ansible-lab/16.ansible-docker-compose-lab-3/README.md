@@ -29,7 +29,7 @@
 Создать playbook Ansible, который создаст два контейнера: один с NGINX и один с базой данных MySQL, разделив их на две разные сети.
 
 **Решение:**  
-\`\`\`yaml
+```yaml
 ---
 - hosts: localhost
   tasks:
@@ -63,14 +63,14 @@
           - name: private_net
         env:
           MYSQL_ROOT_PASSWORD: rootpassword
-\`\`\`
+```
 
 #### 2. Использование переменных окружения
 **Задание:**  
 Добавить использование переменных окружения для настройки NGINX и MySQL через Ansible.
 
 **Решение:**  
-\`\`\`yaml
+```yaml
 ---
 - hosts: localhost
   vars:
@@ -107,14 +107,14 @@
           - name: private_net
         env:
           MYSQL_ROOT_PASSWORD: "{{ mysql_root_password }}"
-\`\`\`
+```
 
 #### 3. Настройка секретов
 **Задание:**  
 Настроить секреты для передачи паролей базы данных MySQL через Ansible.
 
 **Решение:**  
-\`\`\`yaml
+```yaml
 ---
 - hosts: localhost
   vars_files:
@@ -134,19 +134,19 @@
           - name: private_net
         env:
           MYSQL_ROOT_PASSWORD: "{{ mysql_password }}"
-\`\`\`
+```
 
 # В файле secrets.yml:
-\`\`\`yaml
+```yaml
 mysql_password: "supersecretpassword"
-\`\`\`
+```
 
 #### 4. Обновление контейнеров без остановки
 **Задание:**  
 Реализовать обновление NGINX контейнера без остановки работы сервиса с помощью Ansible.
 
 **Решение:**  
-\`\`\`yaml
+```yaml
 ---
 - hosts: localhost
   tasks:
@@ -162,7 +162,7 @@ mysql_password: "supersecretpassword"
           - name: private_net
         ports:
           - "8080:80"
-\`\`\`
+```
 
 ### Дополнительные задания:
 1. **Реализуйте мониторинг контейнеров:**  
