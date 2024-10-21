@@ -136,7 +136,7 @@
           MYSQL_ROOT_PASSWORD: "{{ mysql_password }}"
 ```
 
-# В файле secrets.yml:
+##### В файле secrets.yml:
 ```yaml
 mysql_password: "supersecretpassword"
 ```
