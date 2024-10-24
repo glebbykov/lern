@@ -1,0 +1,5 @@
+Linux scripting is powerful for automation.
+Commands like `diff` help compare files.
+`md5sum` is used for verifying file integrity.
+Working with text files in Linux is efficient and flexible.
+Cron jobs can automate tasks on a schedule.

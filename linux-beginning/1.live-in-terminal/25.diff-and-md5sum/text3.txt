@@ -1,0 +1,5 @@
+Linux scripting is essential for automating tasks.
+Commands like `diff` are useful for comparing files.
+The `md5sum` command is crucial for file integrity checks.
+Working with text files in Linux is efficient and flexible.
+Automating tasks using cron is a common practice.
