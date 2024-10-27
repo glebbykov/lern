@@ -12,7 +12,7 @@
 Создайте самоподписанный сертификат для использования с вашим сервером. Выполните следующую команду в директории `ansiblebook/ch03/playbooks`, чтобы сгенерировать сертификат:
 
 ```bash
-$ openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
     -subj /CN=localhost \
     -keyout files/nginx.key -out files/nginx.crt
 ```
