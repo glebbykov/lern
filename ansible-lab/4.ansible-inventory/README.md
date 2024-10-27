@@ -85,6 +85,10 @@ ansible_ssh_private_key_file=/path/to/private/key
   hosts: dbservers
   become: true
   tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
     - name: Install MySQL
       package:
         name: mysql-server
