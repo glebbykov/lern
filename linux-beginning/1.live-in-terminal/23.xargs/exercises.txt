@@ -26,4 +26,4 @@ cat file_list.txt | xargs -s 100 rm
 
 Проверьте, как `xargs` работает с пустыми строками, используя опцию -r.
 Пример:
-cat file_list.txt | xargs -r rm
+cat file_list.txt | xargs -r rm 
