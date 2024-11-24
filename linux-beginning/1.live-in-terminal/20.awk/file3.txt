@@ -1,0 +1,7 @@
+1001	John	Doe	New York	30	Engineer
+1002	Jane	Smith	San Francisco	40	Doctor
+1003	Jack	Johnson	Los Angeles	25	Teacher
+1004	Emily	Jones	Chicago	50	Lawyer
+1005	Michael	Brown	Houston	35	Artist
+1006	Sara	Connor	Miami	28	Designer
+1007	Chris	Evans	Boston	45	Actor
