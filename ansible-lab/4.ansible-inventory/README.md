@@ -156,10 +156,11 @@ ansible all -i inventory.ini -m ping
   hosts: dbservers
   become: true
   tasks:
-    - name: Install MySQL
-      package:
-        name: mysql-server
+    - name: Update apt cache
+      apt:
+        name: mariadb-server
         state: present
+        update_cache: yes 
 
     - name: Prepare database
       mysql_db:
