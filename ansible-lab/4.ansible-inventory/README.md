@@ -88,12 +88,9 @@ ansible_ssh_private_key_file=/path/to/private/key
   tasks:
     - name: Update apt cache
       apt:
-        update_cache: yes
-
-    - name: Install MySQL
-      package:
         name: mysql-server
         state: present
+        update_cache: yes 
 
 - name: Gather system information
   hosts: local
