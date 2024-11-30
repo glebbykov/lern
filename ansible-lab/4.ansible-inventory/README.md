@@ -80,6 +80,7 @@ ansible_ssh_private_key_file=/path/to/private/key
       package:
         name: nginx
         state: present
+        update_cache: yes
 
 - name: Install and configure database server
   hosts: dbservers
