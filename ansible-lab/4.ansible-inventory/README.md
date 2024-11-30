@@ -88,7 +88,7 @@ ansible_ssh_private_key_file=/path/to/private/key
   tasks:
     - name: Update apt cache
       apt:
-        name: mysql-server
+        name: mariadb-server
         state: present
         update_cache: yes 
 
