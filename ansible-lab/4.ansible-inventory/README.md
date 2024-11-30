@@ -77,7 +77,7 @@ ansible_ssh_private_key_file=/path/to/private/key
   become: true
   tasks:
     - name: Install Nginx
-      package:
+      apt:
         name: nginx
         state: present
         update_cache: yes
