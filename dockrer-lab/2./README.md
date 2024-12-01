@@ -82,7 +82,7 @@
 
 2. Запишите данные в том:
     ```bash
-    docker exec -it nginx-volume bash -c "echo 'Hello, Docker!' > /usr/share/nginx/html/index.html"
+    docker exec -it nginx-volume bash -c "echo 'Hello, Docker' > /usr/share/nginx/html/index.html"
     ```
 
 3. Удалите контейнер и убедитесь, что данные остались в томе:
