@@ -21,6 +21,7 @@
          apt:
            name: apache2
            state: present
+           update_cache: yes
 
        - name: Конфигурация Apache
          template:
