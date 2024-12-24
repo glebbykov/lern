@@ -115,25 +115,29 @@
 ### 6. Развертывание приложения в Kubernetes
 
 1. Запустите приложение в Kubernetes:
-   ```bash
-   kubectl run kubia --image=<ваш_docker_hub_id>/kubia --port=8080 --generator=run/v1
-   ```
-2. Проверьте статус запущенных модулей:
-   ```bash
-   kubectl get pods
-   ```
-3. Создайте объект службы:
-   ```bash
-   kubectl expose rc kubia --type=LoadBalancer --name=kubia-http
-   ```
+```bash
+kubectl run kubia --image=<ваш_docker_hub_id>/kubia --port=8080
+```
+
+2. Проверьте статус запущенных Pod'ов:
+```bash
+kubectl get pods
+```
+
+3. Создайте объект службы (Service):
+```bash
+kubectl expose pod kubia --type=LoadBalancer --name=kubia-http --port=8080 --target-port=8080
+```
+
 4. Найдите внешний IP-адрес службы:
-   ```bash
-   kubectl get svc
-   ```
-5. Доступ к приложению:
-   ```bash
-   curl <внешний_ip>:8080
-   ```
+```bash
+kubectl get svc
+```
+
+5. Получите доступ к приложению:
+```bash
+curl <внешний_ip>:8080
+```
 6. Ответьте на вопросы:
    - Чем отличаются модули (pods) от контейнеров?
    - Какова роль служб (services) в Kubernetes?
