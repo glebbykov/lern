@@ -63,12 +63,12 @@ func main() {
    ```bash
    source ~/.profile
    ```
-
+   
    или просто сделайте export:
 
-  ```bash
-  export PATH=$PATH:/usr/local/go/bin
-  ```
+   ```bash
+   export PATH=$PATH:/usr/local/go/bin
+   ```
 
 6. **Проверьте установку:**
 
