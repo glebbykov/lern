@@ -63,12 +63,12 @@ func main() {
    ```bash
    source ~/.profile
    ```
-   
+
    или просто сделайте export:
 
-   ```bash
-   export PATH=$PATH:/usr/local/go/bin
-   ```
+  ```bash
+  export PATH=$PATH:/usr/local/go/bin
+  ```
 
 6. **Проверьте установку:**
 
@@ -131,10 +131,12 @@ func main() {
 
 2. **Подключите физический интерфейс к мосту:**
 
-   Присоедините существующий физический интерфейс (например, `eth0`) к мосту:
+   Убедитесь, что IP-адрес перенесён с физического интерфейса на мост для сохранения сетевого подключения:
 
    ```bash
-   sudo ip link set eth0 master br0
+   sudo ip addr flush dev ens4
+   sudo ip addr add 10.128.0.15/32 dev br0
+   sudo ip link set ens4 master br0
    ```
 
 3. **Создайте виртуальные интерфейсы veth:**
@@ -159,13 +161,14 @@ func main() {
 
    ```bash
    sudo ip link set br0 up
+   sudo ip link set ens4 up
    sudo ip link set veth1 up
    sudo ip link set veth2 up
    ```
 
-6. **Назначьте IP-адрес мосту:**
+6. **Назначьте IP-адрес мосту (если требуется):**
 
-   Присвойте IP-адрес мосту `br0` для проверки подключения:
+   Если IP-адреса ещё нет на мосту, присвойте его для проверки подключения:
 
    ```bash
    sudo ip addr add 192.168.1.1/24 dev br0
@@ -182,7 +185,7 @@ func main() {
    Проверьте доступность с помощью команды:
 
    ```bash
-   curl http://192.168.1.1:8080
+   curl http://10.128.0.15:8080
    ```
 
 8. **Тестирование между пространствами имен:**
