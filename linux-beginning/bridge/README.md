@@ -268,10 +268,8 @@ ip netns exec ns1 ping -c 3 10.0.0.2
      ip netns exec ns1 ping -c 3 10.0.0.2
      ```
    - Убедитесь, что соединение по TCP заблокировано:
-     ```bash
-     i
-     ```
 
+```bash
 root\@br1:\~# ip netns exec ns1 ping -c 3 10.0.0.2
 
 PING 10.0.0.2 (10.0.0.2) 56(84) bytes of data.
@@ -290,7 +288,10 @@ rtt min/avg/max/mdev = 0.076/0.077/0.078/0.001 ms
 
 root\@br1:\~# ip netns exec ns1 nc -zv 10.0.0.2 80
 
-exec of "nc" failed: No such file or directoryНиже представлен полный скрипт для автоматизации всех описанных шагов. Сохраните его в файл, например, `setup_bridge.sh`, и выполните от имени root.
+exec of "nc" failed: No such file or directory
+```
+
+Ниже представлен полный скрипт для автоматизации всех описанных шагов. Сохраните его в файл, например, `setup_bridge.sh`, и выполните от имени root.
 
 Ниже представлен полный скрипт для автоматизации всех описанных шагов. Сохраните его в файл, например, `setup_bridge.sh`, и выполните от имени root.
 
