@@ -1,228 +1,249 @@
-# Лабораторная работа №6: Работа с Job и CronJob в Kubernetes
+# Лабораторная работа №5: Работа с ReplicationController и ReplicaSet
 
 ## Цели лабораторной работы
 
-1. Научиться работать с ресурсом `Job` для выполнения задач, которые завершаются после выполнения.
-2. Разобраться с конфигурацией `Job` для последовательного и параллельного выполнения.
-3. Понять, как настроить временные ограничения выполнения задач.
-4. Изучить создание и использование ресурса `CronJob` для периодического выполнения задач.
+1. Изучить, как менять шаблон подов в `ReplicationController`.
+2. Научиться горизонтальному масштабированию подов.
+3. Понять, как удалять ReplicationController и его поды.
+4. Познакомиться с использованием ReplicaSet вместо ReplicationController.
+5. Ознакомиться с использованием DaemonSet для запуска подов на всех узлах кластера.
 
 ---
 
-## Часть 1: Создание Job для выполнения одной задачи
+## Часть 1: Изменение шаблона подов в ReplicationController
 
-### Определение Job ресурса
+1. Откройте ReplicationController для редактирования:
 
-1. Создайте файл `exporter.yaml` со следующим содержимым:
+    ```bash
+    kubectl edit rc kubia
+    ```
+
+2. Добавьте новый лейбл к секции `metadata` в шаблоне подов. Пример:
 
     ```yaml
-    apiVersion: batch/v1
-    kind: Job
-    metadata:
-      name: batch-job
+    template:
+      metadata:
+        labels:
+          app: kubia
+          version: v2
+    ```
+
+3. Сохраните изменения. Kubernetes выведет сообщение об успешном обновлении.
+
+4. Убедитесь, что лейблы у существующих подов не изменились:
+
+    ```bash
+    kubectl get pods --show-labels
+    ```
+
+5. Удалите один из подов:
+
+    ```bash
+    kubectl delete pod <имя_пода>
+    ```
+
+6. Проверьте, что новый под был создан с обновлённым шаблоном:
+
+    ```bash
+    kubectl get pods --show-labels
+    ```
+
+---
+
+## Часть 2: Масштабирование подов
+
+### Горизонтальное масштабирование через `kubectl scale`
+
+1. Увеличьте количество реплик до 10:
+
+    ```bash
+    kubectl scale rc kubia --replicas=10
+    ```
+
+2. Проверьте, что было создано 10 подов:
+
+    ```bash
+    kubectl get rc
+    ```
+
+3. Уменьшите количество реплик обратно до 3:
+
+    ```bash
+    kubectl scale rc kubia --replicas=3
+    ```
+
+### Масштабирование через редактирование
+
+1. Откройте ReplicationController для редактирования:
+
+    ```bash
+    kubectl edit rc kubia
+    ```
+
+2. Измените значение поля `replicas` на 10:
+
+    ```yaml
     spec:
-      template:
-        metadata:
-          labels:
-            app: batch-job
-        spec:
-          restartPolicy: OnFailure
-          containers:
-          - name: main
-            image: luksa/batch-job
+      replicas: 10
     ```
 
-2. Примените манифест для создания Job:
+3. Сохраните изменения. Kubernetes масштабирует поды автоматически.
+
+---
+
+## Часть 3: Удаление ReplicationController
+
+1. Удалите ReplicationController, оставив поды без управления:
 
     ```bash
-    kubectl apply -f exporter.yaml
+    kubectl delete rc kubia --cascade=false
     ```
 
-3. Проверьте создание ресурса Job и связанного пода:
+2. Проверьте, что поды продолжают работать:
 
     ```bash
-    kubectl get jobs
     kubectl get pods
     ```
 
-4. Дождитесь завершения выполнения пода и проверьте его логи:
+3. Удалите оставшиеся поды вручную:
 
     ```bash
-    kubectl logs <имя_пода>
+    kubectl delete pod <имя_пода>
     ```
 
 ---
 
-## Часть 2: Запуск нескольких экземпляров Job
+## Часть 4: Работа с ReplicaSet
 
-### Последовательное выполнение подов
+### Создание ReplicaSet
 
-1. Создайте манифест `multi-completion-batch-job.yaml`:
+1. Создайте файл `kubia-replicaset.yaml` со следующим содержимым:
 
     ```yaml
-    apiVersion: batch/v1
-    kind: Job
+    apiVersion: apps/v1
+    kind: ReplicaSet
     metadata:
-      name: multi-completion-batch-job
+      name: kubia
     spec:
-      completions: 5
+      replicas: 3
+      selector:
+        matchLabels:
+          app: kubia
       template:
         metadata:
           labels:
-            app: batch-job
+            app: kubia
         spec:
-          restartPolicy: OnFailure
           containers:
-          - name: main
-            image: luksa/batch-job
+          - name: kubia
+            image: luksa/kubia
     ```
 
-2. Примените манифест:
+2. Примените файл:
 
     ```bash
-    kubectl apply -f multi-completion-batch-job.yaml
+    kubectl apply -f kubia-replicaset.yaml
     ```
 
-3. Наблюдайте, как поды выполняются последовательно:
+3. Проверьте созданные ресурсы:
 
     ```bash
-    kubectl get pods --watch
+    kubectl get rs
+    kubectl get pods
     ```
 
-### Параллельное выполнение подов
+### Использование расширенных селекторов
 
-1. Создайте манифест `multi-completion-parallel-batch-job.yaml`:
+1. Модифицируйте селектор ReplicaSet, используя `matchExpressions`:
 
     ```yaml
-    apiVersion: batch/v1
-    kind: Job
-    metadata:
-      name: multi-completion-parallel-batch-job
-    spec:
-      completions: 5
-      parallelism: 2
-      template:
-        metadata:
-          labels:
-            app: batch-job
-        spec:
-          restartPolicy: OnFailure
-          containers:
-          - name: main
-            image: luksa/batch-job
+    selector:
+      matchExpressions:
+        - key: app
+          operator: In
+          values:
+            - kubia
     ```
 
-2. Примените манифест:
-
-    ```bash
-    kubectl apply -f multi-completion-parallel-batch-job.yaml
-    ```
-
-3. Наблюдайте за параллельным выполнением подов:
-
-    ```bash
-    kubectl get pods --watch
-    ```
+2. Примените изменения и проверьте работу нового селектора.
 
 ---
 
-## Часть 3: Ограничение времени выполнения Job
+## Часть 5: Работа с DaemonSet
 
-1. Создайте манифест `job-with-deadline.yaml`:
+### Создание DaemonSet
+
+1. Создайте файл `ssd-monitor-daemonset.yaml` со следующим содержимым:
 
     ```yaml
-    apiVersion: batch/v1
-    kind: Job
+    apiVersion: apps/v1
+    kind: DaemonSet
     metadata:
-      name: job-with-deadline
+      name: ssd-monitor
     spec:
-      activeDeadlineSeconds: 60
+      selector:
+        matchLabels:
+          app: ssd-monitor
       template:
         metadata:
           labels:
-            app: batch-job
+            app: ssd-monitor
         spec:
-          restartPolicy: OnFailure
+          nodeSelector:
+            disk: ssd
           containers:
           - name: main
-            image: luksa/batch-job
+            image: luksa/ssd-monitor
     ```
 
-2. Примените манифест:
+2. Примените файл:
 
     ```bash
-    kubectl apply -f job-with-deadline.yaml
+    kubectl apply -f ssd-monitor-daemonset.yaml
     ```
 
-3. Убедитесь, что Job завершился, если время выполнения превысило 60 секунд:
+3. Проверьте DaemonSet:
 
     ```bash
-    kubectl describe job job-with-deadline
+    kubectl get ds
+    kubectl get pods
     ```
 
----
+### Добавление лейблов узлу
 
-## Часть 4: Использование CronJob для периодического выполнения
-
-### Создание CronJob
-
-1. Создайте манифест `cronjob.yaml`:
-
-    ```yaml
-    apiVersion: batch/v1beta1
-    kind: CronJob
-    metadata:
-      name: batch-job-every-fifteen-minutes
-    spec:
-      schedule: "0,15,30,45 * * * *"
-      jobTemplate:
-        spec:
-          template:
-            metadata:
-              labels:
-                app: periodic-batch-job
-            spec:
-              restartPolicy: OnFailure
-              containers:
-              - name: main
-                image: luksa/batch-job
-    ```
-
-2. Примените манифест:
+1. Добавьте лейбл узлу:
 
     ```bash
-    kubectl apply -f cronjob.yaml
+    kubectl label node <имя_узла> disk=ssd
     ```
 
-3. Убедитесь, что `CronJob` создает `Job` каждые 15 минут:
+2. Проверьте, что DaemonSet создал под на узле:
 
     ```bash
-    kubectl get cronjobs
-    kubectl get jobs
+    kubectl get pods -o wide
     ```
 
-### Удаление CronJob
-
-1. Удалите ресурс CronJob:
+3. Удалите лейбл узла и проверьте, что под был удалён:
 
     ```bash
-    kubectl delete cronjob batch-job-every-fifteen-minutes
+    kubectl label node <имя_узла> disk=hdd --overwrite
+    kubectl get pods
     ```
 
 ---
 
 ## Итог
 
-Вы узнали:
-- Как использовать `Job` для выполнения задач, которые завершаются после выполнения.
-- Как запускать задачи последовательно и параллельно.
-- Как ограничивать время выполнения задач.
-- Как использовать `CronJob` для планирования периодического выполнения задач.
+Вы научились:
+- Изменять шаблоны подов.
+- Масштабировать поды.
+- Удалять ReplicationController с сохранением подов.
+- Работать с ReplicaSet.
+- Использовать DaemonSet для запуска подов на всех узлах.
 
-Удалите все созданные ресурсы:
+Сохраните свои изменения и удалите все созданные ресурсы:
 
 ```bash
-kubectl delete jobs --all
-kubectl delete cronjobs --all
+kubectl delete rc,rs,ds --all
 kubectl delete pods --all
 ```
