@@ -37,7 +37,10 @@
     ```bash
     mkdir docker-secrets && cd docker-secrets
     ```
-
+выполнить команду
+    ```
+    docker swarm init
+    ```
 2. Создайте секрет с именем `my_secret`:
     ```bash
     echo "super_secret_password" | docker secret create my_secret -
