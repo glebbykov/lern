@@ -37,7 +37,8 @@
     ```bash
     mkdir docker-secrets && cd docker-secrets
     ```
-выполнить команду
+    
+выполнить команду:
     ```
     docker swarm init
     ```
