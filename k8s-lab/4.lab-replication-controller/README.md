@@ -52,7 +52,7 @@ ReplicationController — это ресурс Kubernetes, который обе�
 2. Примените этот манифест, чтобы создать ReplicationController:
 
     ```bash
-    kubectl create -f kubia-rc.yaml
+    kubectl apply -f kubia-rc.yaml
     ```
 
 3. Убедитесь, что создано три Pod'а:
