@@ -82,7 +82,7 @@ kubectl logs kubia-liveness --previous
 
 ---
 
-## 2. Управление Pod'ами через ReplicationController
+## 2. Управление Pod'ами через ReplicationController (устарвший механизм)
 
 ### Теоретическая часть
 
