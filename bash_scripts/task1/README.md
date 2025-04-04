@@ -5,7 +5,6 @@
 ```bash
 #!/bin/bash
 
-# Настройки
 TARGET_IPS=("IP_1" "IP_2")
 COMMENT="some comment"
 CHAIN="CHAIN_NAME"
