@@ -1,0 +1,18 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: broken-imagepull
+  namespace: lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: broken-imagepull
+  template:
+    metadata:
+      labels:
+        app: broken-imagepull
+    spec:
+      containers:
+      - name: app
+        image: nginx:no-such-tag

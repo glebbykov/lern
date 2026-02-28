@@ -1,0 +1,21 @@
+﻿name: lint-yaml
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  yamllint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: ibiqlik/action-yamllint@v3
+      with:
+        file_or_dir: .
+        config_data: |
+          extends: default
+          rules:
+            line-length:
+              max: 160
+              level: warning
+            document-start: disable

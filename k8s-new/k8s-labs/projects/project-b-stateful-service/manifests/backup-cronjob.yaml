@@ -1,0 +1,23 @@
+﻿apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: redis-backup
+  namespace: lab
+spec:
+  schedule: "0 */6 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: backup
+            image: redis:7.2-alpine
+            command:
+            - sh
+            - -c
+            - |
+              TS=$(date +%Y%m%d-%H%M%S)
+              redis-cli -h redis-0.redis-headless.lab.svc.cluster.local --rdb "/tmp/redis-${TS}.rdb"
+              ls -lh /tmp/redis-*.rdb

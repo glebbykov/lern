@@ -1,0 +1,14 @@
+﻿apiVersion: v1
+kind: Service
+metadata:
+  name: net-demo-nodeport
+  namespace: lab
+spec:
+  selector:
+    app: net-demo
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+    nodePort: 30080
+  type: NodePort

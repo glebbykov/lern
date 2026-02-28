@@ -1,0 +1,10 @@
+﻿apiVersion: v1
+kind: Pod
+metadata:
+  name: dnsutils
+  namespace: lab
+spec:
+  containers:
+  - name: dnsutils
+    image: registry.k8s.io/e2e-test-images/agnhost:2.53
+    command: ["sleep", "3600"]

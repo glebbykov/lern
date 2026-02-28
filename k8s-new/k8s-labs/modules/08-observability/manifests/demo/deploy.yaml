@@ -1,0 +1,33 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: obs-demo
+  namespace: lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: obs-demo
+  template:
+    metadata:
+      labels:
+        app: obs-demo
+    spec:
+      containers:
+      - name: logger
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - |
+          while true; do
+            echo "ts=$(date -Iseconds) level=info msg=heartbeat"
+            sleep 5
+          done
+        resources:
+          requests:
+            cpu: 20m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi

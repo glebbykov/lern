@@ -1,0 +1,20 @@
+﻿apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: demo-app
+  namespace: argocd
+spec:
+  project: labs
+  source:
+    repoURL: https://github.com/glebbykov/lern.git
+    targetRevision: main
+    path: k8s-new/k8s-labs/modules/09-helm-gitops/charts/demo-app
+    helm:
+      releaseName: demo-app
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: lab
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

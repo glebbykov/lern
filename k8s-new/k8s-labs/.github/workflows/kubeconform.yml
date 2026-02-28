@@ -1,0 +1,25 @@
+﻿name: kubeconform
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install kubeconform
+      run: |
+        set -euo pipefail
+        curl -sSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar -xz
+        sudo mv kubeconform /usr/local/bin/kubeconform
+    - name: Validate manifests
+      run: |
+        set -euo pipefail
+        files=$(find common modules projects -type f \( -name '*.yaml' -o -name '*.yml' \) | grep -v '/broken/' || true)
+        if [ -z "$files" ]; then
+          echo "No manifest files found"
+          exit 0
+        fi
+        kubeconform -summary -strict $files

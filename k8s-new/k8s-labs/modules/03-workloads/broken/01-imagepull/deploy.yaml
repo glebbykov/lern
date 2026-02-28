@@ -1,0 +1,20 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workload-demo
+  namespace: lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: workload-demo
+  template:
+    metadata:
+      labels:
+        app: workload-demo
+    spec:
+      containers:
+      - name: app
+        image: nginx:not-a-real-tag
+        ports:
+        - containerPort: 80

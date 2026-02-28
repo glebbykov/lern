@@ -1,0 +1,12 @@
+﻿apiVersion: v1
+kind: Service
+metadata:
+  name: workload-demo
+  namespace: lab
+spec:
+  selector:
+    app: workload-demo
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80

@@ -1,0 +1,49 @@
+name: docker-lab-ci
+
+on:
+  push:
+    paths:
+      - "docker-lab/**"
+      - ".github/workflows/docker-lab-ci.yml"
+  pull_request:
+    paths:
+      - "docker-lab/**"
+      - ".github/workflows/docker-lab-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docker-lab
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install lint tooling
+        run: |
+          sudo wget -qO /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64
+          sudo chmod +x /usr/local/bin/hadolint
+          python -m pip install --upgrade pip
+          python -m pip install yamllint
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Run lint
+        run: make lint
+
+  compose-validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docker-lab
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Docker CLI info
+        run: docker version
+
+      - name: Validate compose files
+        run: make test

@@ -1,0 +1,23 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: security-fail
+  namespace: lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: security-fail
+  template:
+    metadata:
+      labels:
+        app: security-fail
+    spec:
+      containers:
+      - name: app
+        image: nginxinc/nginx-unprivileged:1.27-alpine
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+        ports:
+        - containerPort: 8080

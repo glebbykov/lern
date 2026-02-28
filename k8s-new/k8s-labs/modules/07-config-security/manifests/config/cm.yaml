@@ -1,0 +1,9 @@
+﻿apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config-lab
+  namespace: lab
+data:
+  APP_MODE: lab
+  FEATURE_FLAG: "true"
+  LOG_LEVEL: info

@@ -1,0 +1,10 @@
+﻿apiVersion: v1
+kind: Pod
+metadata:
+  name: curl
+  namespace: lab
+spec:
+  containers:
+  - name: curl
+    image: curlimages/curl:8.12.1
+    command: ["sleep", "3600"]

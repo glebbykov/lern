@@ -1,0 +1,14 @@
+﻿apiVersion: v1
+kind: LimitRange
+metadata:
+  name: lab-limits
+  namespace: lab
+spec:
+  limits:
+  - type: Container
+    defaultRequest:
+      cpu: 100m
+      memory: 128Mi
+    default:
+      cpu: 300m
+      memory: 256Mi

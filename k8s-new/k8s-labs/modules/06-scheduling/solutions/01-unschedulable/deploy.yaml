@@ -1,0 +1,22 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unschedulable-demo
+  namespace: lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: unschedulable-demo
+  template:
+    metadata:
+      labels:
+        app: unschedulable-demo
+    spec:
+      nodeSelector:
+        kubernetes.io/os: linux
+      containers:
+      - name: app
+        image: nginx:1.27-alpine
+        ports:
+        - containerPort: 80

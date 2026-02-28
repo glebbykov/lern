@@ -1,0 +1,15 @@
+﻿apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- namespaces/lab.yaml
+- namespaces/platform.yaml
+- quotas/lab-resourcequota.yaml
+- quotas/lab-limitrange.yaml
+- debug/netshoot-pod.yaml
+- debug/curl-pod.yaml
+- debug/dnsutils-pod.yaml
+- templates/deployment.yaml
+- templates/service.yaml
+- templates/ingress.yaml
+- templates/configmap.yaml
+- templates/secret.yaml

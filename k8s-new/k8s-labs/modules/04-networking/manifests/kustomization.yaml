@@ -1,0 +1,10 @@
+﻿apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- services/deploy.yaml
+- services/svc.yaml
+- nodeport/svc-nodeport.yaml
+- ingress/ingress.yaml
+- netpol/default-deny.yaml
+- netpol/allow-dns.yaml
+- netpol/allow-app.yaml

@@ -1,0 +1,13 @@
+﻿apiVersion: v1
+kind: Service
+metadata:
+  name: stateful-demo-headless
+  namespace: lab
+spec:
+  clusterIP: None
+  selector:
+    app: stateful-demo
+  ports:
+  - name: tcp
+    port: 80
+    targetPort: 8080

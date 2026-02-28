@@ -1,0 +1,15 @@
+﻿# macOS / Windows
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+
+# Temp / logs
+*.log
+*.tmp
+*.bak
+
+# Local kubeconfig copies
+kubeconfig.local

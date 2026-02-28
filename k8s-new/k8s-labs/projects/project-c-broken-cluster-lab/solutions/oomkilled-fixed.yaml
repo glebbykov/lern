@@ -1,0 +1,34 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: broken-oom
+  namespace: lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: broken-oom
+  template:
+    metadata:
+      labels:
+        app: broken-oom
+    spec:
+      containers:
+      - name: app
+        image: python:3.11-alpine
+        command:
+        - sh
+        - -c
+        - |
+          python - <<'PY'
+          x = 'a' * (64 * 1024 * 1024)
+          import time
+          time.sleep(600)
+          PY
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 300m
+            memory: 256Mi

@@ -1,0 +1,19 @@
+﻿apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: print-time-cron
+  namespace: lab
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 120
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: writer
+            image: busybox:1.36
+            command: ["sh", "-c", "date"]

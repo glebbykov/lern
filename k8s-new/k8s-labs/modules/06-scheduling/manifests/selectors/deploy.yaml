@@ -1,0 +1,29 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: select-by-label
+  namespace: lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: select-by-label
+  template:
+    metadata:
+      labels:
+        app: select-by-label
+    spec:
+      nodeSelector:
+        disktype: ssd
+      containers:
+      - name: app
+        image: nginx:1.27-alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 150m
+            memory: 128Mi

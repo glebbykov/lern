@@ -1,0 +1,38 @@
+﻿apiVersion: v1
+kind: Pod
+metadata:
+  name: init-wait-dns
+  namespace: lab
+spec:
+  volumes:
+  - name: shared
+    emptyDir: {}
+  initContainers:
+  - name: wait-dns
+    image: busybox:1.36
+    command:
+    - sh
+    - -c
+    - |
+      until nslookup kubernetes.default.svc.cluster.local; do
+        echo "waiting for dns"
+        sleep 2
+      done
+      echo "dns-ready" > /work/status.txt
+    volumeMounts:
+    - name: shared
+      mountPath: /work
+  containers:
+  - name: app
+    image: busybox:1.36
+    command:
+    - sh
+    - -c
+    - |
+      while true; do
+        cat /work/status.txt
+        sleep 10
+      done
+    volumeMounts:
+    - name: shared
+      mountPath: /work

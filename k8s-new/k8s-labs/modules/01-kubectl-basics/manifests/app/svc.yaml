@@ -1,0 +1,13 @@
+﻿apiVersion: v1
+kind: Service
+metadata:
+  name: kb-web
+  namespace: lab
+spec:
+  selector:
+    app: kb-web
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+  type: ClusterIP

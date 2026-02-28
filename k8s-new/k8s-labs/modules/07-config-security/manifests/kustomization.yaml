@@ -1,0 +1,10 @@
+﻿apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- config/cm.yaml
+- config/deploy.yaml
+- secrets/secret.yaml
+- secrets/deploy.yaml
+- rbac/sa.yaml
+- rbac/role.yaml
+- rbac/rolebinding.yaml

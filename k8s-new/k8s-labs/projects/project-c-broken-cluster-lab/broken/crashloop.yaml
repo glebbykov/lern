@@ -1,0 +1,19 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: broken-crashloop
+  namespace: lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: broken-crashloop
+  template:
+    metadata:
+      labels:
+        app: broken-crashloop
+    spec:
+      containers:
+      - name: app
+        image: busybox:1.36
+        command: ["sh", "-c", "exit 1"]
