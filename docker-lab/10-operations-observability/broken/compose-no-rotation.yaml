@@ -1,0 +1,6 @@
+﻿services:
+  app:
+    image: nginx:1.27-alpine
+    ports:
+      - "8085:80"
+    # Broken: no log rotation options.

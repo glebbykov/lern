@@ -1,0 +1,13 @@
+﻿services:
+  app:
+    build: .
+    container_name: security-app
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "8083:8083"

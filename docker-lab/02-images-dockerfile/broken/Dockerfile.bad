@@ -1,0 +1,12 @@
+﻿FROM python:3.12
+
+WORKDIR /app
+
+# Anti-pattern: copying full context too early breaks cache.
+COPY . .
+
+# Anti-pattern: cache is not cleaned.
+RUN pip install -r requirements.txt
+
+# Anti-pattern: running as root.
+CMD python app.py

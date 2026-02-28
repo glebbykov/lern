@@ -1,0 +1,6 @@
+﻿services:
+  crash:
+    image: alpine:3.20
+    container_name: dbg-crash
+    command: ["sh", "-c", "echo start && exit 1"]
+    restart: always

@@ -1,0 +1,10 @@
+﻿services:
+  app1:
+    image: nginx:1.27-alpine
+    ports:
+      - "8099:80"
+
+  app2:
+    image: nginx:1.27-alpine
+    ports:
+      - "8099:80"

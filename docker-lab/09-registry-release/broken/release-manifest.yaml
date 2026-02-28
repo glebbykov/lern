@@ -1,0 +1,4 @@
+﻿services:
+  app:
+    # Broken: mutable tag in release manifest.
+    image: ghcr.io/example/simple-web:latest

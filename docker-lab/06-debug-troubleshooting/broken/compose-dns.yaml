@@ -1,0 +1,16 @@
+﻿services:
+  api:
+    image: hashicorp/http-echo:1.0.0
+    command: ["-text=ok", "-listen=:5678"]
+    networks:
+      - backend
+
+  client:
+    image: alpine:3.20
+    command: ["sh", "-c", "sleep infinity"]
+    networks:
+      - frontend
+
+networks:
+  frontend:
+  backend:
