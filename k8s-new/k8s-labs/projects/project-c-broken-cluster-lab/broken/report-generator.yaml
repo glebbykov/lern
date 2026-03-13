@@ -21,14 +21,14 @@ spec:
         - -c
         - |
           python - <<'PY'
-          x = 'a' * (64 * 1024 * 1024)
+          x = 'a' * (300 * 1024 * 1024)
           import time
           time.sleep(600)
           PY
         resources:
           requests:
             cpu: 50m
-            memory: 128Mi
+            memory: 32Mi
           limits:
-            cpu: 300m
-            memory: 256Mi
+            cpu: 200m
+            memory: 64Mi

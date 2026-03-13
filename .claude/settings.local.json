@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find . -maxdepth 2 -type d -not -path */.git*)",
+      "Bash(for dir:*)",
+      "Bash(do echo:*)",
+      "Bash(for d:*)",
+      "Bash(for f:*)",
+      "Bash(do)",
+      "Bash(echo \"=== $f ===\")",
+      "Read(//c/main/lern/k8s-new/k8s-labs/modules/**)",
+      "Bash(done)",
+      "Bash(\"c:/main/lern/k8s-new/k8s-labs/modules/03-workloads/broken/scenario-01/README.md\":*)",
+      "Bash(grep \"name:\" c:/main/lern/k8s-new/k8s-labs/projects/project-c-broken-cluster-lab/solutions/*.yaml)"
+    ]
+  }
+}

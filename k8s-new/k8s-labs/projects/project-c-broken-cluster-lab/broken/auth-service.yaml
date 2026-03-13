@@ -1,18 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: payment-worker
+  name: auth-service
   namespace: lab
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: payment-worker
+      app: auth-service
   template:
     metadata:
       labels:
-        app: payment-worker
+        app: auth-service
     spec:
       containers:
       - name: app
-        image: nginx:1.27-alpine
+        image: busybox:1.36
+        command: ["sh", "-c", "exit 1"]
