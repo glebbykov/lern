@@ -74,9 +74,9 @@ Docker DNS резолвит имя сервиса в IP прямо внутри 
 
 ```bash
 # nslookup по имени сервиса из toolbox
-docker compose -f lab/compose.yaml exec toolbox nslookup api
-docker compose -f lab/compose.yaml exec toolbox nslookup db
-docker compose -f lab/compose.yaml exec toolbox nslookup edge
+docker compose -f lab/compose.yaml exec toolbox nslookup api.
+docker compose -f lab/compose.yaml exec toolbox nslookup db.
+docker compose -f lab/compose.yaml exec toolbox nslookup edge.
 ```
 
 Обрати внимание: все три имени резолвятся, хотя `edge` и `db` в разных сетях — потому что `toolbox` подключён к обеим.
@@ -105,7 +105,7 @@ docker inspect $(docker compose -f lab/compose.yaml ps -q api) \
 ```bash
 # edge пробует достучаться до db по имени
 docker compose -f lab/compose.yaml exec edge \
-  sh -c "nslookup db || echo 'DNS fail'"
+  sh -c "nslookup db. || echo 'DNS fail'"
 
 # edge пробует достучаться до db напрямую по порту
 docker compose -f lab/compose.yaml exec edge \
@@ -138,7 +138,7 @@ docker compose -f broken/compose.yaml exec toolbox \
 
 # api пробует достучаться до db — fail, api не в backend сети
 docker compose -f broken/compose.yaml exec api \
-  sh -c "nslookup db || echo 'DNS fail: api cannot see db'"
+  sh -c "nslookup db. || echo 'DNS fail: api cannot see db'"
 
 docker compose -f broken/compose.yaml down
 ```
