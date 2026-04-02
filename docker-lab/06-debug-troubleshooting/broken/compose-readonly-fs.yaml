@@ -1,0 +1,9 @@
+services:
+  app:
+    image: alpine:3.20
+    container_name: dbg-readonly
+    # Broken: read_only делает корневую ФС контейнера read-only.
+    # Приложение пытается создать файл в /app — Read-only file system.
+    # Симптом: ExitCode=1, в логах "Read-only file system".
+    read_only: true
+    command: ["sh", "-c", "echo writing... && touch /app/data.txt && echo done"]

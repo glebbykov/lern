@@ -1,0 +1,23 @@
+services:
+  init:
+    image: alpine:3.20
+    # init-контейнер создаёт директорию с правами root:root 750
+    command: ["sh", "-c", "mkdir -p /data && chmod 750 /data && chown root:root /data"]
+    volumes:
+      - vol-perm-data:/data
+
+  app:
+    image: alpine:3.20
+    container_name: dbg-vol-perm
+    # Broken: запускается от uid=1000, но /data принадлежит root:root 750.
+    # UID 1000 не входит в группу root → Permission denied.
+    # Симптом: ExitCode=1, в логах "Permission denied".
+    user: "1000:1000"
+    command: ["sh", "-c", "echo trying to write... && touch /data/app.lock && echo done"]
+    volumes:
+      - vol-perm-data:/data
+    depends_on:
+      - init
+
+volumes:
+  vol-perm-data:

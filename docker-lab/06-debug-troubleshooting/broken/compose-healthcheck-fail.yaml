@@ -1,0 +1,15 @@
+services:
+  web:
+    image: nginx:1.27-alpine
+    container_name: dbg-unhealthy
+    ports:
+      - "8098:80"
+    healthcheck:
+      # Broken: путь /healthz не существует в дефолтном nginx → 404.
+      # wget с флагом -q завершается с exit code 1 при не-2xx ответе.
+      # Симптом: статус (unhealthy) после start_period.
+      test: ["CMD", "wget", "-qO-", "http://localhost/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s

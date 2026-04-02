@@ -1,0 +1,9 @@
+services:
+  oom:
+    image: alpine:3.20
+    container_name: dbg-oom
+    # Broken: лимит 6 MiB — слишком мало.
+    # dd пытается выделить 20 MiB → Linux OOM killer отправляет SIGKILL.
+    # Симптом: ExitCode=137, OOMKilled=true.
+    mem_limit: 6m
+    command: ["sh", "-c", "dd if=/dev/zero bs=1M count=20 of=/dev/null && echo done"]

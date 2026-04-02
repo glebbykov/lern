@@ -1,0 +1,8 @@
+services:
+  web:
+    # Broken: тег nonexistent-9999 не существует в Docker Hub.
+    # Docker не может спуллить образ → контейнер не создаётся.
+    # Симптом: Error "manifest not found" при docker compose up.
+    image: nginx:nonexistent-9999
+    ports:
+      - "8097:80"

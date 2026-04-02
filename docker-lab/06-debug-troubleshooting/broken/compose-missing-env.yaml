@@ -1,0 +1,14 @@
+services:
+  app:
+    image: alpine:3.20
+    container_name: dbg-missing-env
+    # Broken: скрипт требует DATABASE_URL, но она не передана.
+    # set -u запрещает обращение к неустановленным переменным → exit 2.
+    # Симптом: ExitCode=2, в логах "parameter not set".
+    command:
+      - sh
+      - -c
+      - |
+        set -u
+        echo "Connecting to: $DATABASE_URL"
+        echo "App started"
