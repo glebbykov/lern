@@ -1,17 +1,37 @@
 # 10. Operations и observability
 
-## Цель
+## Зачем это важно
 
-Настроить минимально достаточную наблюдаемость: resource limits, метрики,
-алерты, контроль роста логов и дашборд в Grafana.
+Без resource limits один контейнер убивает хост. Без ротации логов диск заполняется за ночь. Без метрик — невозможно отличить "тормозит" от "падает". Observability — это не опция, это условие работы в production.
+
+```text
+Проблема             → Симптом без observability  → Симптом с observability
+────────────────────────────────────────────────────────────────────────────
+Memory leak          → сервер недоступен            → алерт за 10 мин до краша
+Диск заполнился      → все сервисы упали            → алерт при 80% заполнении
+OOM Kill             → контейнер "просто упал"      → OOMKilled=true, exit 137
+Медленный запрос     → "всё тормозит"               → p99 latency график
+```
 
 ---
 
-## Теория
+## Часть 1 — Resource limits
 
-### Resource limits — защита от «шумного соседа»
+### Без лимитов: «шумный сосед»
 
-Без лимитов один контейнер может исчерпать CPU или RAM всего хоста.
+```bash
+# Запустить без лимитов (сломанный пример)
+docker compose -f broken/compose-no-rotation.yaml up -d
+
+# Сколько памяти доступно контейнеру? (0 = без лимита = весь хост)
+docker inspect $(docker compose -f broken/compose-no-rotation.yaml ps -q) \
+  --format '{{.HostConfig.Memory}}'
+# 0  ← без ограничений
+
+docker compose -f broken/compose-no-rotation.yaml down
+```
+
+### С лимитами
 
 ```yaml
 services:
@@ -19,24 +39,41 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.50"        # не более 0.5 ядра
-          memory: 256M        # OOMKiller при превышении
+          cpus: "0.50"    # не более 0.5 ядра
+          memory: 256M    # OOMKill при превышении
         reservations:
-          cpus: "0.10"        # гарантированный минимум
+          cpus: "0.10"    # гарантированный минимум
           memory: 64M
 ```
 
-> `deploy.resources` работает с `docker compose up` напрямую (Compose v2).
-> В Swarm-режиме — то же самое. Не путайте с deprecated `mem_limit`.
-
-Диагностика при OOMKill:
 ```bash
-docker inspect <container> --format '{{.State.OOMKilled}}'
-# true — контейнер убит по памяти, exit code 137
-docker stats --no-stream   # текущее потребление всех контейнеров
+docker compose -f lab/compose.yaml up -d
+
+# Реальное потребление vs лимит
+docker stats --no-stream \
+  --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}'
+
+# Лимиты конкретного контейнера (в байтах)
+docker inspect observability-app \
+  --format 'cpu_shares={{.HostConfig.CpuShares}} memory={{.HostConfig.Memory}}'
 ```
 
-### Лог-ротация — обязательна в production
+---
+
+## Часть 2 — Лог-ротация
+
+### Без ротации
+
+```bash
+# Путь к лог-файлу
+docker inspect observability-app --format '{{.LogPath}}'
+
+# Без ротации он будет расти бесконечно
+# Смотрим текущий размер
+ls -lh $(docker inspect observability-app --format '{{.LogPath}}')
+```
+
+### С ротацией
 
 ```yaml
 services:
@@ -44,46 +81,94 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "10m"      # максимум 10 МБ на файл
-        max-file: "5"        # не более 5 файлов → 50 МБ итого
+        max-size: "10m"   # максимум 10 МБ на файл
+        max-file: "3"     # не более 3 файлов → итого 30 МБ
 ```
 
-Без ротации `/var/lib/docker/containers/<id>/<id>-json.log` растёт
-бесконечно и заполняет диск хоста.
-
-Где лежат логи:
 ```bash
-docker inspect <container> --format '{{.LogPath}}'
-ls -lh $(docker inspect <container> --format '{{.LogPath}}')
+# Проверить конфиг логгера
+docker inspect observability-app \
+  --format '{{.HostConfig.LogConfig.Type}} | max-size={{index .HostConfig.LogConfig.Config "max-size"}} max-file={{index .HostConfig.LogConfig.Config "max-file"}}'
+# json-file | max-size=10m max-file=3
 ```
 
-### Метрики: что собирать минимально
+---
 
-| Метрика | Что означает | Алерт при |
+## Часть 3 — Стек метрик
+
+```bash
+docker compose -f lab/compose.yaml up -d
+```
+
+Доступные endpoint-ы:
+
+| Сервис | URL | Что показывает |
 |---|---|---|
-| `container_cpu_usage_seconds_total` | Использование CPU | > 80% sustained |
-| `container_memory_usage_bytes` | RSS память | > 90% от limit |
-| `container_memory_failcnt` | Счётчик OOMKill | > 0 |
-| `container_fs_writes_bytes_total` | Запись на диск | аномальный рост |
-| HTTP 5xx rate | Ошибки приложения | > 1% запросов |
-| `up` (probe) | Сервис отвечает | == 0 |
+| App | <http://localhost:8085> | Тестовое приложение |
+| cAdvisor | <http://localhost:8086> | Метрики контейнеров |
+| Prometheus | <http://localhost:9090> | TSDB + PromQL |
+| Grafana | <http://localhost:3000> | Дашборды (admin/admin) |
 
-### Стек наблюдаемости
+```bash
+# Все targets активны?
+curl -s http://localhost:9090/api/v1/targets | python3 -m json.tool | grep '"health"'
+# "health": "up"  ← все должны быть up
 
-```text
-App ──► cAdvisor ──► Prometheus ──► Grafana (дашборд)
-                                 └──► Alertmanager (уведомления)
+# cAdvisor отдаёт метрики?
+curl -s http://localhost:8086/metrics | grep container_memory_usage_bytes | head -3
 ```
 
-- **cAdvisor** — собирает метрики контейнеров (CPU, RAM, network, FS).
-- **Prometheus** — scrape + хранение временных рядов + PromQL.
-- **Grafana** — визуализация. Импорт дашборда ID `193` для cAdvisor.
-- **Alertmanager** — маршрутизация алертов в Slack/email/PagerDuty.
+---
 
-### Alerting rules — основа
+## Часть 4 — PromQL: практические запросы
+
+Перейди в <http://localhost:9090>:
+
+```promql
+# Память всех контейнеров в МБ
+container_memory_usage_bytes{image!=""} / 1024 / 1024
+
+# CPU usage в % (за последние 2 минуты)
+rate(container_cpu_usage_seconds_total{image!=""}[2m]) * 100
+
+# Топ-5 контейнеров по памяти
+topk(5, container_memory_usage_bytes{image!=""})
+
+# Процент использования памяти от лимита
+container_memory_usage_bytes{image!=""}
+  / container_spec_memory_limit_bytes{image!="", container_spec_memory_limit_bytes > 0}
+  * 100
+
+# Контейнеры без лимита памяти (опасно!)
+container_spec_memory_limit_bytes == 0
+
+# Контейнеры с OOMKill
+container_memory_failcnt > 0
+
+# Входящий сетевой трафик по контейнерам (bytes/sec)
+rate(container_network_receive_bytes_total{image!=""}[1m])
+```
+
+---
+
+## Часть 5 — Grafana: импорт дашборда
+
+1. Открой <http://localhost:3000> (admin / admin)
+2. **Dashboards → Import → ID `193` → Load**
+3. Выбери Prometheus как datasource → **Import**
+
+После импорта видишь:
+- CPU usage по контейнерам
+- Memory usage vs limit
+- Network I/O
+- Filesystem usage
+
+---
+
+## Часть 6 — Alerting rules
 
 ```yaml
-# prometheus/alerts.yml
+# lab/prometheus/alerts.yml
 groups:
   - name: containers
     rules:
@@ -93,17 +178,18 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "Container {{ $labels.name }} OOMKilled"
+          summary: "OOMKill: {{ $labels.name }}"
 
       - alert: ContainerHighMemory
         expr: |
-          container_memory_usage_bytes
-            / container_spec_memory_limit_bytes > 0.9
+          container_memory_usage_bytes{image!=""}
+            / container_spec_memory_limit_bytes{image!="", container_spec_memory_limit_bytes>0}
+            > 0.9
         for: 2m
         labels:
           severity: warning
         annotations:
-          summary: "Container {{ $labels.name }} memory > 90%"
+          summary: "Memory > 90%: {{ $labels.name }}"
 
       - alert: ContainerDown
         expr: absent(container_last_seen{name!=""})
@@ -111,93 +197,32 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "Container {{ $labels.name }} is down"
+          summary: "Container down: {{ $labels.name }}"
 ```
 
-Подключение в `prometheus.yml`:
-```yaml
-rule_files:
-  - /etc/prometheus/alerts.yml
+```bash
+# Проверить что Prometheus видит правила
+curl -s http://localhost:9090/api/v1/rules | python3 -m json.tool | grep '"name"'
 ```
 
 ---
 
-## Практика
-
-### 1. Поднимите стек наблюдаемости
+## Часть 7 — Broken: нет ротации и лимитов
 
 ```bash
-docker compose -f lab/compose.yaml up -d
+docker compose -f broken/compose-no-rotation.yaml up -d
+
+# Что не настроено?
+docker inspect $(docker compose -f broken/compose-no-rotation.yaml ps -q) \
+  --format '{{.HostConfig.LogConfig.Type}} size={{index .HostConfig.LogConfig.Config "max-size"}}'
+# json-file size=  ← max-size пустой
+
+docker inspect $(docker compose -f broken/compose-no-rotation.yaml ps -q) \
+  --format 'memory={{.HostConfig.Memory}}'
+# memory=0  ← без лимита
+
+docker compose -f broken/compose-no-rotation.yaml down
 ```
-
-### 2. Проверьте endpoints
-
-- App: <http://localhost:8085>
-- cAdvisor: <http://localhost:8086>
-- Prometheus: <http://localhost:9090>
-- Grafana: <http://localhost:3000> (admin / admin)
-
-### 3. Посмотрите метрики в Prometheus
-
-Перейдите в <http://localhost:9090> → Status → Targets — все `UP`.
-
-Выполните запросы:
-```promql
-# Использование памяти всех контейнеров (bytes)
-container_memory_usage_bytes{image!=""}
-
-# CPU в % (за последние 5 минут)
-rate(container_cpu_usage_seconds_total{image!=""}[5m]) * 100
-
-# Контейнеры с OOMKill
-container_memory_failcnt > 0
-```
-
-### 4. Импортируйте дашборд в Grafana
-
-1. Откройте Grafana: <http://localhost:3000>
-2. Dashboards → Import → ID `193` → Load
-3. Выберите Prometheus как datasource → Import
-
-### 5. Проверьте resource limits
-
-```bash
-# Текущее потребление
-docker stats --no-stream
-
-# Лимиты конкретного контейнера
-docker inspect <container> \
-  --format 'mem limit: {{.HostConfig.Memory}}  cpu: {{.HostConfig.NanoCpus}}'
-```
-
-### 6. Проверьте лог-ротацию
-
-```bash
-# Где логи и какой размер?
-docker inspect <container> --format '{{.LogPath}}'
-
-# Конфигурация логгера
-docker inspect <container> \
-  --format '{{json .HostConfig.LogConfig}}' | python -m json.tool
-```
-
-### 7. Найдите проблему в broken/compose-nolimits.yaml
-
-```bash
-docker compose -f broken/compose-nolimits.yaml up -d
-# Что не настроено? Что будет при spike трафика?
-```
-
----
-
-## Проверка
-
-- Все контейнеры имеют `deploy.resources.limits`.
-- Log rotation включена (`max-size`, `max-file`).
-- Prometheus scrape'ит cAdvisor (`Status → Targets`).
-- Grafana показывает метрики контейнеров.
-- Понимаете, что будет при OOMKill (exit code 137).
-- Можете написать простой alerting rule.
 
 ---
 
@@ -205,40 +230,24 @@ docker compose -f broken/compose-nolimits.yaml up -d
 
 | Ошибка | Последствие | Исправление |
 |---|---|---|
-| Нет `max-size` в logging | Диск хоста заполняется логами | `logging.options.max-size: "10m"` |
-| Нет memory limit | OOMKill всего хоста, не только контейнера | `deploy.resources.limits.memory` |
-| Prometheus target down | Нет метрик → нет алертов | Проверить сеть между сервисами |
-| Неверный target в prometheus.yml | Scrape ни одного контейнера | Имя сервиса == hostname в compose-сети |
-| Нет `--start-period` в healthcheck | False OOMKill при медленном старте | Добавить `start-period: 30s` |
+| Нет `max-size` в logging | Диск хоста заполняется логами | `max-size: "10m"` |
+| Нет memory limit | OOM killer убивает другие процессы хоста | `deploy.resources.limits.memory` |
+| Prometheus target down | Нет метрик, нет алертов | Проверить сеть между сервисами |
+| Неверное имя сервиса в prometheus.yml | Scrape не работает | Имя target = имя сервиса в compose-сети |
+| Нет `--start-period` в healthcheck | Ложные alerty при медленном старте | `start_period: 30s` |
 
 ---
 
-## Вопросы
+## Вопросы для самопроверки
 
-1. Почему default `json-file` без ротации опасен?
-2. Какие 3 метрики вы считаете базовыми для любого API?
-3. Что такое exit code 137? Как отличить от 143?
-4. Чем `limits` отличается от `reservations` в resource config?
-5. Что нужно алертить в первую очередь? Составьте топ-3.
-
----
-
-## Дополнительные задания
-
-- Добавьте alerting rules для OOMKill и high memory в `prometheus/alerts.yml`.
-- Настройте Alertmanager с webhook-уведомлением.
-- Создайте нагрузку (`stress` или `ab`) и отследите в Grafana.
-- Попробуйте превысить memory limit — посмотрите на `OOMKilled: true`.
+1. Почему `json-file` без `max-size` опасен в production?
+2. Что такое exit code 137 и как через Prometheus узнать что произошёл OOM Kill?
+3. Чем `limits` отличается от `reservations` в resource config?
+4. Что такое `for: 2m` в alerting rule?
+5. Какие 3 метрики обязательны для любого API-сервиса?
+6. Как Prometheus находит cAdvisor? Где настраивается target?
 
 ---
-
-## Файлы модуля
-
-- `lab/compose.yaml` — app + cAdvisor + Prometheus + Grafana.
-- `lab/prometheus/prometheus.yml` — конфиг scrape.
-- `lab/prometheus/alerts.yml` — базовые alerting rules.
-- `broken/compose-nolimits.yaml` — стенд без лимитов и ротации.
-- `checks/verify.sh` — проверка доступности всех endpoints.
 
 ## Cleanup
 

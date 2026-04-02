@@ -1,227 +1,316 @@
 # 07. Security и hardening
 
-## Цель
+## Зачем это важно
 
-Снизить риск на уровне образа и рантайма: non-root, read-only FS,
-минимальные capabilities, отсутствие секретов в слоях, сканирование образов.
+Контейнер по умолчанию — не изолированная среда. Процесс в контейнере работает от `root`, имеет 14 Linux capabilities и полный доступ к ФС. Hardening — это последовательное сужение этих привилегий.
+
+```text
+Дефолтный контейнер              После hardening
+─────────────────────────────────────────────────
+user: root                  →    user: app (uid 1000)
+capabilities: 14            →    capabilities: 0
+rw filesystem               →    read_only: true + tmpfs
+secrets in ENV              →    /run/secrets/ (Compose secrets)
+image: ubuntu:latest        →    python:3.12-slim / distroless
+```
 
 ---
 
-## Теория
+## Часть 1 — Non-root пользователь
 
-### 1. Non-root пользователь
+### Проблема
 
-Большинство официальных образов запускают процесс от `root` по умолчанию.
-Это значит, что при побеге из контейнера атакующий получает root на хосте.
+```bash
+# Запустим любой официальный образ — кто мы?
+docker run --rm nginx:1.27-alpine id
+# uid=0(root) gid=0(root)  ← root!
+
+# Что это значит: если процесс выбьется из контейнера,
+# он получит root-доступ к хосту
+```
+
+### Исправление в Dockerfile
 
 ```dockerfile
-# Alpine-style
+# Alpine
 RUN addgroup -S app && adduser -S -G app app
 USER app
 
-# Debian-style
+# Debian/Ubuntu
 RUN addgroup --system app && adduser --system --ingroup app app
 USER app
 ```
 
-Проверка:
-```bash
-docker inspect <container> --format '{{.Config.User}}'
-# Должно быть: app (или uid != 0)
+### Практика
 
-docker exec <container> id
-# uid=100(app) gid=101(app) — НЕ root
+```bash
+# Собираем hardened образ
+docker build -t dockerlab/secure-app:dev ./lab
+
+# Проверяем пользователя двумя способами
+docker run --rm dockerlab/secure-app:dev id
+# uid=100(app) gid=101(app)  ← не root
+
+docker inspect dockerlab/secure-app:dev --format '{{.Config.User}}'
+# app
 ```
 
-### 2. Read-only filesystem + tmpfs
+---
+
+## Часть 2 — Read-only filesystem + tmpfs
+
+Если атакующий получил RCE в контейнере — read-only ФС лишает его возможности оставить backdoor, положить вредоносный файл или модифицировать бинарники.
 
 ```yaml
 services:
   app:
     read_only: true          # корневая ФС только для чтения
     tmpfs:
-      - /tmp                 # RAM-диск для временных файлов
-      - /var/run             # PID-файлы и сокеты
+      - /tmp                 # RAM-диск — для временных файлов
+      - /var/run             # для PID-файлов и сокетов
 ```
 
-Если приложение пишет в `/tmp` или `/var/run` — это нормально через `tmpfs`.
-Всё остальное не должно записывать на диск в production.
+### Проверка read-only
 
-Проверка:
 ```bash
-docker inspect <container> --format '{{.HostConfig.ReadonlyRootfs}}'
+docker compose -f lab/compose.yaml up -d --build
+
+# Проверить флаг
+docker inspect security-app --format '{{.HostConfig.ReadonlyRootfs}}'
 # true
+
+# Убедиться что tmpfs смонтирован
+docker inspect security-app \
+  --format '{{range .HostConfig.Tmpfs}}tmpfs: {{.}}{{println}}{{end}}'
+
+# Проверить что /tmp доступен для записи
+docker exec security-app sh -c "touch /tmp/ok && echo 'tmp: writable'"
+
+# Проверить что /app недоступен для записи
+docker exec security-app sh -c "touch /app/nope || echo 'rootfs: readonly'"
 ```
 
-### 3. Capabilities: принцип минимальных привилегий
+### Что бывает без tmpfs при read_only
 
-Linux capabilities разбивают права root на ~40 отдельных привилегий.
-По умолчанию Docker оставляет ~14 capabilities. Нужно дропать всё, добавляя только нужное.
+```bash
+# Запустим сломанный пример — flask пытается писать в /tmp без tmpfs
+docker run --rm --read-only python:3.12-slim \
+  sh -c "python3 -c 'import tempfile; tempfile.mkstemp()' || echo 'crash: no tmpfs'"
+```
+
+---
+
+## Часть 3 — Linux capabilities: принцип минимальных привилегий
 
 ```yaml
 services:
   app:
     cap_drop:
-      - ALL                  # сбрасываем все capabilities
+      - ALL                  # сбросить все ~14 дефолтных capabilities
     cap_add:
-      - NET_BIND_SERVICE     # разрешаем биндиться на порты < 1024 (если нужно)
+      - NET_BIND_SERVICE     # добавить обратно только нужное
 ```
 
-Частые capabilities и когда они нужны:
+### Что это даёт
 
-| Capability | Нужна для |
+```bash
+# Без cap_drop: что умеет процесс по умолчанию?
+docker run --rm alpine:3.20 cat /proc/1/status | grep CapEff
+# CapEff: 00000000a80425fb  ← много бит выставлено
+
+# После cap_drop: ALL
+docker run --rm --cap-drop ALL alpine:3.20 cat /proc/1/status | grep CapEff
+# CapEff: 0000000000000000  ← ничего
+
+# Проверить capabilities запущенного контейнера
+docker inspect security-app \
+  --format 'drop: {{.HostConfig.CapDrop}}  add: {{.HostConfig.CapAdd}}'
+# drop: [ALL]  add: []
+```
+
+### Часто нужные capabilities
+
+| Capability | Когда нужна |
 |---|---|
-| `NET_BIND_SERVICE` | Биндинг на порты < 1024 (nginx, 443) |
-| `CHOWN` | Смена владельца файлов в entrypoint |
-| `SETUID`/`SETGID` | Su, sudo внутри контейнера |
-| `SYS_PTRACE` | strace, gdb (только для отладки!) |
+| `NET_BIND_SERVICE` | Биндинг на порты < 1024 (443, 80) |
+| `CHOWN` | `chown` в entrypoint-скрипте |
+| `SETUID`/`SETGID` | `su`, `sudo` внутри контейнера |
+| `SYS_PTRACE` | `strace`, `gdb` — только для отладки |
 
-### 4. no-new-privileges
+---
 
-Запрещает процессу повысить привилегии через `setuid`-биты или `sudo`:
+## Часть 4 — no-new-privileges
 
 ```yaml
 security_opt:
   - no-new-privileges:true
 ```
 
-### 5. Секреты: что нельзя и что можно
+Запрещает процессу повысить привилегии через `setuid`-биты, `sudo` или `execve`. Без этого флага `cap_drop: ALL` можно обойти через setuid-бинарники внутри контейнера.
 
-| Способ | Видимость | Рекомендация |
-|---|---|---|
-| `ENV` в Dockerfile | `docker history`, любой с доступом к образу | **Никогда** |
-| `ARG` в Dockerfile | `docker history --no-trunc` | **Никогда** |
-| `environment:` в compose.yaml | git-история, логи | Только для dev |
-| `.env` файл (не в git) | только на хосте | Приемлемо для dev |
-| `secrets:` в compose | bind-mount `/run/secrets/` | **Рекомендуется** |
-| Vault / AWS SSM / переменные CI | внешняя система | Лучший вариант |
+```bash
+# Проверить флаг
+docker inspect security-app \
+  --format '{{.HostConfig.SecurityOpt}}'
+# [no-new-privileges:true]
+```
 
-**Docker Compose secrets** — монтируют секрет как файл:
+---
+
+## Часть 5 — Секреты: как не утечь
+
+### Антипаттерн: секрет в ENV/ARG
+
+```bash
+# Собираем сломанный образ
+docker build -t dockerlab/secret-leak:bad ./broken
+
+# Секрет виден в истории слоёв — НАВСЕГДА
+docker history dockerlab/secret-leak:bad --no-trunc | grep -i secret
+# ENV API_TOKEN=super-secret-token  ← виден всем кто имеет доступ к образу
+
+# Даже если добавить RUN unset API_TOKEN — секрет остаётся в предыдущем слое
+docker image inspect dockerlab/secret-leak:bad \
+  --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -i token
+# API_TOKEN=super-secret-token
+```
+
+### Правильный подход: Compose secrets
 
 ```yaml
 # compose.yaml
 secrets:
   db_password:
-    file: ./secrets/db_password.txt   # файл не в git!
+    file: ./secrets/db_password.txt   # файл НЕ в git
 
 services:
   app:
     secrets:
       - db_password
-    # секрет доступен как /run/secrets/db_password
+    # доступен внутри как: /run/secrets/db_password
 ```
-
-В приложении читайте из файла, а не из переменной окружения:
-```python
-with open('/run/secrets/db_password') as f:
-    password = f.read().strip()
-```
-
-### 6. Сканирование образов — Trivy
-
-[Trivy](https://github.com/aquasecurity/trivy) — сканер CVE, секретов
-и мисконфигураций. Запуск без установки через Docker:
 
 ```bash
-# Сканирование образа на CVE
-docker run --rm aquasec/trivy:latest image dockerlab/secure-app:dev
-
-# Только HIGH и CRITICAL уязвимости
-docker run --rm aquasec/trivy:latest image \
-  --severity HIGH,CRITICAL dockerlab/secure-app:dev
-
-# Сканирование Dockerfile на мисконфигурации
-docker run --rm -v "$(pwd)":/work aquasec/trivy:latest config /work/lab
-
-# Сканирование на секреты в файловой системе образа
-docker run --rm aquasec/trivy:latest image \
-  --scanners secret dockerlab/secure-app:dev
+# Проверить что секрет доступен только как файл, не в env
+docker exec security-app cat /run/secrets/db_password 2>/dev/null || echo 'нет секрета в compose.yaml'
+docker exec security-app env | grep -i password || echo 'пароля нет в переменных окружения'
 ```
 
-Что проверяет Trivy:
-- CVE в OS-пакетах и зависимостях (pip, npm, go.sum...)
-- Секреты в слоях образа (токены, ключи, пароли)
-- Мисконфигурации Dockerfile (root, latest, ADD вместо COPY)
+### Сравнение способов
 
-### 7. Минимальный базовый образ
-
-```dockerfile
-# Уровни по размеру и attack surface (от большого к малому):
-FROM ubuntu:22.04            # ~80 MB, много пакетов
-FROM debian:bookworm-slim    # ~50 MB, меньше пакетов
-FROM python:3.12-slim        # ~130 MB, slim Debian
-FROM python:3.12-alpine      # ~50 MB, musl libc (осторожно с совместимостью)
-FROM gcr.io/distroless/python3  # ~30 MB, нет shell вообще
-```
-
-Distroless — нет shell, нет менеджера пакетов, нет лишних инструментов.
-Отлично для production, сложнее для отладки.
+| Способ | Видимость | Рекомендация |
+|---|---|---|
+| `ENV` в Dockerfile | `docker history`, любой с образом | Никогда |
+| `ARG` в Dockerfile | `docker history --no-trunc` | Никогда |
+| `environment:` в compose | git-история, логи CI | Только dev |
+| `.env` файл (не в git) | только хост | Приемлемо для dev |
+| `secrets:` в compose | bind-mount `/run/secrets/` | Рекомендуется |
+| Vault / AWS SSM | внешняя система | Лучший вариант prod |
 
 ---
 
-## Практика
-
-### 1. Соберите secure-образ
+## Часть 6 — Сканирование образа через Trivy
 
 ```bash
-docker build -t dockerlab/secure-app:dev ./lab
-```
-
-### 2. Поднимите стенд
-
-```bash
-docker compose -f lab/compose.yaml up -d --build
-```
-
-### 3. Проверьте hardening
-
-```bash
-# Пользователь не root?
-docker inspect security-app --format '{{.Config.User}}'
-
-# Корневая ФС read-only?
-docker inspect security-app --format '{{.HostConfig.ReadonlyRootfs}}'
-
-# Capabilities сброшены?
-docker inspect security-app \
-  --format '{{.HostConfig.CapDrop}}  add: {{.HostConfig.CapAdd}}'
-```
-
-### 4. Просканируйте образ через Trivy
-
-```bash
-# Все уязвимости
+# Полное сканирование — CVE в OS-пакетах и зависимостях
 docker run --rm aquasec/trivy:latest image dockerlab/secure-app:dev
 
-# Только критические
+# Только HIGH и CRITICAL
 docker run --rm aquasec/trivy:latest image \
   --severity HIGH,CRITICAL dockerlab/secure-app:dev
-```
 
-### 5. Найдите утечку в broken/Dockerfile.secret
-
-```bash
-# Соберите сломанный образ
-docker build -t dockerlab/secret-leak:bad ./broken
-
-# Найдите секрет в истории слоёв
-docker history dockerlab/secret-leak:bad --no-trunc | grep -i secret
-
-# Сканируем на секреты
+# Поиск секретов в слоях образа
 docker run --rm aquasec/trivy:latest image \
   --scanners secret dockerlab/secret-leak:bad
+
+# Проверка Dockerfile на мисконфигурации
+docker run --rm -v "$(pwd)":/work aquasec/trivy:latest config /work/lab
+
+# Сравнение двух образов
+docker run --rm aquasec/trivy:latest image --severity HIGH,CRITICAL python:3.12
+docker run --rm aquasec/trivy:latest image --severity HIGH,CRITICAL python:3.12-slim
+# slim содержит существенно меньше CVE
+```
+
+### Что проверяет Trivy
+
+| Тип сканирования | Что находит |
+|---|---|
+| `vuln` (дефолт) | CVE в OS-пакетах, pip/npm/go.sum |
+| `secret` | Токены, ключи, пароли в слоях образа |
+| `config` | Мисконфигурации Dockerfile (root, latest, ADD) |
+| `license` | Несовместимые лицензии зависимостей |
+
+---
+
+## Часть 7 — Минимальный базовый образ
+
+```bash
+# Сравним размеры
+docker pull python:3.12        && docker image ls python:3.12        --format '{{.Size}}'
+docker pull python:3.12-slim   && docker image ls python:3.12-slim   --format '{{.Size}}'
+docker pull python:3.12-alpine && docker image ls python:3.12-alpine --format '{{.Size}}'
+
+# python:3.12         ~1.0 GB
+# python:3.12-slim    ~150 MB
+# python:3.12-alpine  ~55 MB
+
+# Число CVE обычно растёт с размером
+docker run --rm aquasec/trivy:latest image --severity CRITICAL python:3.12
+docker run --rm aquasec/trivy:latest image --severity CRITICAL python:3.12-slim
+```
+
+**Distroless** — нет shell, нет пакетного менеджера:
+```bash
+# Попытаться войти в distroless контейнер
+docker run --rm gcr.io/distroless/python3 sh
+# OCI runtime error — нет /bin/sh
+# Это фича: атакующий не может запустить интерактивную сессию
 ```
 
 ---
 
-## Проверка
+## Комплексная проверка hardening
 
-- Контейнер работает от non-root пользователя.
-- Корневая ФС read-only (`ReadonlyRootfs: true`).
-- `cap_drop: [ALL]` применён.
-- `no-new-privileges:true` установлен.
-- Trivy не находит HIGH/CRITICAL в финальном образе.
-- Понимаете разницу между способами передачи секретов.
+```bash
+# Запустить лабораторный стенд
+docker compose -f lab/compose.yaml up -d --build
+
+# 1. Non-root
+docker inspect security-app --format '{{.Config.User}}'
+# app (не root)
+
+# 2. Read-only FS
+docker inspect security-app --format '{{.HostConfig.ReadonlyRootfs}}'
+# true
+
+# 3. Capabilities
+docker inspect security-app --format 'drop={{.HostConfig.CapDrop}} add={{.HostConfig.CapAdd}}'
+# drop=[ALL] add=[]
+
+# 4. no-new-privileges
+docker inspect security-app --format '{{.HostConfig.SecurityOpt}}'
+# [no-new-privileges:true]
+
+# 5. Сервис отвечает несмотря на все ограничения
+curl http://localhost:8083/healthz
+```
+
+---
+
+## Broken примеры
+
+| Файл | Проблема |
+|---|---|
+| `broken/Dockerfile.secret` | `ENV API_TOKEN=...` — секрет в слое образа |
+
+```bash
+# Собери и найди секрет
+docker build -t dockerlab/secret-leak:bad ./broken
+docker history dockerlab/secret-leak:bad --no-trunc | grep API_TOKEN
+docker rm -f $(docker ps -aq --filter ancestor=dockerlab/secret-leak:bad) 2>/dev/null || true
+docker rmi dockerlab/secret-leak:bad
+```
 
 ---
 
@@ -229,39 +318,24 @@ docker run --rm aquasec/trivy:latest image \
 
 | Ошибка | Последствие | Исправление |
 |---|---|---|
-| Запуск от root | Root на хосте при побеге | `USER app` в Dockerfile |
-| Секрет в `ENV`/`ARG` | Виден в `docker history` | Compose secrets или внешняя система |
-| Нет `tmpfs` при `read_only` | Приложение падает при записи в `/tmp` | Добавить `tmpfs: [/tmp]` |
-| `cap_drop` без `no-new-privileges` | Можно восстановить caps через setuid | Добавить `no-new-privileges:true` |
-| Базовый образ с known CVE | Уязвимый runtime | `trivy image` + обновление |
+| Запуск от root | Root на хосте при escape | `USER app` в Dockerfile |
+| Секрет в `ENV`/`ARG` | Виден в `docker history` навсегда | Compose secrets или Vault |
+| `read_only: true` без `tmpfs` | Падение приложения при записи в `/tmp` | Добавить `tmpfs: [/tmp]` |
+| `cap_drop: ALL` без `no-new-privileges` | setuid-бинарники могут вернуть привилегии | `security_opt: [no-new-privileges:true]` |
+| Большой базовый образ | Много CVE, долгий pull | Использовать `-slim` или `-alpine` |
 
 ---
 
-## Вопросы
+## Вопросы для самопроверки
 
-1. Какие возможности теряет контейнер при `cap_drop: ALL`?
-2. Почему секрет в `ENV` хуже, чем секрет в файле через Compose secrets?
-3. Что даёт `no-new-privileges`? Как его обойти без него?
-4. Чем distroless лучше alpine для production? В чём минус?
-5. Что именно проверяет Trivy? Какие типы уязвимостей?
-
----
-
-## Дополнительные задания
-
-- Прогоните `python:3.12` и `python:3.12-slim` через Trivy — сравните количество CVE.
-- Добавьте Trivy как шаг в CI (проверьте `.github/workflows/docker-lab-ci.yml`).
-- Реализуйте передачу пароля через Compose `secrets:` вместо `environment:`.
-- Попробуйте запустить образ без `tmpfs` при включённом `read_only` — что упадёт?
+1. Какие capabilities Docker добавляет контейнеру по умолчанию и почему это риск?
+2. Почему `ARG SECRET=...` в Dockerfile — утечка, даже если не использовать `ENV`?
+3. Что именно даёт `no-new-privileges:true`? Как это проверить?
+4. Чем distroless лучше alpine для production и в чём его минус для отладки?
+5. Как прочитать секрет из `/run/secrets/` в Python/Go/shell?
+6. Trivy нашёл HIGH CVE в базовом образе — что делать, если патча ещё нет?
 
 ---
-
-## Файлы модуля
-
-- `lab/Dockerfile` — hardened образ (non-root, минимальный base).
-- `lab/compose.yaml` — read-only + tmpfs + cap_drop + no-new-privileges.
-- `broken/Dockerfile.secret` — секрет в слое образа через ARG/ENV.
-- `checks/verify.sh` — автоматическая проверка hardening.
 
 ## Cleanup
 
