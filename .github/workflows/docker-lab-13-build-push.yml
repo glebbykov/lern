@@ -1,0 +1,146 @@
+name: 13 – Build, Scan, Push to GHCR
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths:
+      - "docker-lab/13-cicd-github-actions/lab/**"
+      - ".github/workflows/docker-lab-13-build-push.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "docker-lab/13-cicd-github-actions/lab/**"
+      - ".github/workflows/docker-lab-13-build-push.yml"
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/cicd-app
+
+jobs:
+  # ──────────────────────────────────────────────
+  # job 1: lint
+  # ──────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint Dockerfile (hadolint)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: docker-lab/13-cicd-github-actions/lab/Dockerfile
+          failure-threshold: warning
+
+  # ──────────────────────────────────────────────
+  # job 2: build + smoke test (без push)
+  # ──────────────────────────────────────────────
+  build-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (load locally, no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: docker-lab/13-cicd-github-actions/lab
+          load: true
+          tags: ${{ env.IMAGE }}:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test — /healthz
+        run: |
+          docker run -d --name smoke -p 8080:8080 ${{ env.IMAGE }}:test
+          sleep 2
+          curl --fail --retry 3 --retry-delay 1 http://localhost:8080/healthz
+          docker rm -f smoke
+
+  # ──────────────────────────────────────────────
+  # job 3: scan CVE
+  # ──────────────────────────────────────────────
+  scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image for scanning
+        uses: docker/build-push-action@v6
+        with:
+          context: docker-lab/13-cicd-github-actions/lab
+          load: true
+          tags: ${{ env.IMAGE }}:scan
+          cache-from: type=gha
+
+      - name: Trivy — scan for HIGH/CRITICAL CVE
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.IMAGE }}:scan
+          format: table
+          exit-code: "1"
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+
+  # ──────────────────────────────────────────────
+  # job 4: push — только не для PR
+  # ──────────────────────────────────────────────
+  push:
+    name: Push to GHCR
+    runs-on: ubuntu-latest
+    needs: [build-test, scan]
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write   # обязательно для ghcr.io push
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU (эмуляция arm64)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate tags & labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            # git tag v1.2.3  →  1.2.3  и  1.2
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            # каждый коммит  →  sha-abc1234
+            type=sha,prefix=sha-
+            # latest только на main ветке
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build & push multi-arch (amd64 + arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: docker-lab/13-cicd-github-actions/lab
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
