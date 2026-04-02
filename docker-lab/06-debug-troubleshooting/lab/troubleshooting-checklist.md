@@ -26,12 +26,22 @@ docker compose logs -f --tail 100
 docker inspect <id> --format '{{.State.ExitCode}}'
 docker inspect <id> --format '{{.State.OOMKilled}}'
 docker inspect <id> --format '{{.State.Error}}'
-docker inspect <id> --format '{{json .State.Health}}'
-docker inspect <id> --format '{{json .Config.Env}}'
-docker inspect <id> --format '{{json .Mounts}}'
-docker inspect <id> --format '{{json .NetworkSettings.Networks}}'
-docker inspect <id> --format '{{.HostConfig.Memory}}'
+docker inspect <id> --format '{{.State.Health.Status}}'
 docker inspect <id> --format '{{.HostConfig.ReadonlyRootfs}}'
+# Память в байтах (делить на 1048576 = МБ) — удобнее через docker stats:
+docker stats --no-stream <name>
+
+# Переменные окружения — по одной на строку
+docker inspect <id> --format '{{range .Config.Env}}{{println .}}{{end}}'
+
+# Сети: имя -> IP
+docker inspect <id> --format '{{range $n,$c := .NetworkSettings.Networks}}{{$n}}: {{$c.IPAddress}}{{println}}{{end}}'
+
+# Маунты: тип, источник, назначение
+docker inspect <id> --format '{{range .Mounts}}{{.Type}} {{.Source}} -> {{.Destination}}{{println}}{{end}}'
+
+# Healthcheck — последние результаты
+docker inspect <id> --format '{{range .State.Health.Log}}exit={{.ExitCode}} | {{.Output}}{{end}}'
 ```
 
 ## Шаг 5 — Хронология событий

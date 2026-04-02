@@ -2,8 +2,11 @@ services:
   oom:
     image: alpine:3.20
     container_name: dbg-oom
-    # Broken: лимит 6 MiB — слишком мало.
-    # dd пытается выделить 20 MiB → Linux OOM killer отправляет SIGKILL.
+    # mem_limit + memswap_limit одинаковые → swap отключён для контейнера.
+    # Без memswap_limit процесс может уйти в swap и OOM не сработает.
+    mem_limit: 8m
+    memswap_limit: 8m
+    # /dev/shm — это tmpfs (RAM-backed), запись туда гарантированно
+    # попадает в счётчик памяти cgroup. dd пишет 30 МБ → лимит 8 МБ → SIGKILL.
     # Симптом: ExitCode=137, OOMKilled=true.
-    mem_limit: 6m
-    command: ["sh", "-c", "dd if=/dev/zero bs=1M count=20 of=/dev/null && echo done"]
+    command: ["sh", "-c", "echo 'writing to /dev/shm...' && dd if=/dev/zero of=/dev/shm/fill bs=1M count=30 status=progress && echo done"]
