@@ -1,0 +1,17 @@
+# Broken: COPY . . включает .env с секретами в build context
+# Нет .dockerignore → секреты попадают в слой образа
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Нет .dockerignore → .env с секретами копируется в образ
+COPY . .
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+CMD ["python", "app.py"]
+
+# Проверка:
+# docker build -t test-leak -f broken/Dockerfile.layer-leak ./broken/layer-leak-ctx
+# docker run --rm test-leak cat /app/.env
+# → DATABASE_PASSWORD=super_secret  ← секрет виден!

@@ -1,0 +1,91 @@
+# ─────────────────────────────────────────────────────────────────
+# GitLab CI: Build → Test → Scan → Push
+#
+# Аналог GitHub Actions workflow (examples/build-push.yml),
+# адаптированный для GitLab CI/CD.
+#
+# Использование:
+#   Скопируй в .gitlab-ci.yml
+#   Настрой переменные в GitLab → Settings → CI/CD → Variables:
+#     - CI_REGISTRY_IMAGE (автоматически заполнен)
+#     - DOCKER_AUTH_CONFIG (для альтернативных registries)
+# ─────────────────────────────────────────────────────────────────
+
+stages:
+  - lint
+  - build
+  - scan
+  - push
+
+variables:
+  DOCKER_HOST: tcp://docker:2376
+  DOCKER_TLS_CERTDIR: "/certs"
+  IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+
+# ── Lint ──────────────────────────────────────────────────────
+lint-dockerfile:
+  stage: lint
+  image: hadolint/hadolint:v2.12.0-alpine
+  script:
+    - hadolint Dockerfile --failure-threshold warning
+
+lint-yaml:
+  stage: lint
+  image: cytopia/yamllint:latest
+  script:
+    - yamllint -d relaxed docker-compose.yml || true
+
+# ── Build & Test ──────────────────────────────────────────────
+build:
+  stage: build
+  image: docker:27
+  services:
+    - docker:27-dind
+  script:
+    - docker build -t $IMAGE_TAG .
+    # Smoke test
+    - docker run -d --name smoke -p 8080:8080 $IMAGE_TAG
+    - sleep 3
+    - apk add --no-cache curl
+    - curl --fail --retry 3 http://docker:8080/healthz
+    - docker rm -f smoke
+    # Сохранить образ для следующего stage
+    - docker save $IMAGE_TAG -o image.tar
+  artifacts:
+    paths:
+      - image.tar
+    expire_in: 1 hour
+
+# ── Security Scan ─────────────────────────────────────────────
+trivy-scan:
+  stage: scan
+  image: aquasec/trivy:latest
+  script:
+    - trivy image --input image.tar
+        --exit-code 1
+        --severity HIGH,CRITICAL
+        --ignore-unfixed
+  dependencies:
+    - build
+
+# ── Push to Registry ──────────────────────────────────────────
+push:
+  stage: push
+  image: docker:27
+  services:
+    - docker:27-dind
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_TAG
+  script:
+    - docker load -i image.tar
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    # Tag: sha + semver (если тег)
+    - docker push $IMAGE_TAG
+    - |
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        docker tag $IMAGE_TAG $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
+        docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
+      fi
+  dependencies:
+    - build

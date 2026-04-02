@@ -1,0 +1,18 @@
+# docker compose include — модуляризация больших compose-файлов
+# Compose 2.20+ поддерживает include для подключения внешних compose-файлов
+#
+# Использование:
+#   docker compose -f lab/include/compose.yaml up -d
+
+include:
+  - path: ./database.yaml
+  - path: ./monitoring.yaml
+
+services:
+  api:
+    image: hashicorp/http-echo:1.0.0
+    command: ["-text=api ok", "-listen=:5678"]
+    ports:
+      - "8089:5678"
+    depends_on:
+      - db

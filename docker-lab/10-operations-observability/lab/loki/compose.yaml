@@ -1,0 +1,71 @@
+# Loki + Promtail + Grafana: log aggregation для контейнеров
+#
+# Использование:
+#   docker compose -f lab/loki/compose.yaml up -d
+#
+# Доступ:
+#   Grafana:  http://localhost:3001  (admin/admin)
+#   Loki:     http://localhost:3100/ready
+#
+# В Grafana:
+#   1. Data Sources → Add Loki → URL: http://loki:3100
+#   2. Explore → Label: container_name → Query
+
+services:
+  app:
+    image: nginx:1.27-alpine
+    container_name: loki-demo-app
+    ports:
+      - "8095:80"
+    labels:
+      logging: "promtail"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Генератор логов: создаёт GET-запросы для Nginx
+  load:
+    image: alpine:3.20
+    depends_on:
+      - app
+    command: >
+      sh -c "sleep 5 && while true; do
+        wget -qO- http://app/ > /dev/null 2>&1
+        wget -qO- http://app/nonexistent > /dev/null 2>&1
+        sleep 2
+      done"
+
+  loki:
+    image: grafana/loki:2.9.10
+    container_name: loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki-data:/loki
+
+  promtail:
+    image: grafana/promtail:2.9.10
+    container_name: promtail
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./promtail-config.yaml:/etc/promtail/config.yml:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: loki-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    depends_on:
+      - loki
+
+volumes:
+  loki-data:

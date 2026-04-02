@@ -1,0 +1,32 @@
+# Сценарий 16 — Zombie processes: PID 1 не убирает зомби
+#
+# Shell (sh) как PID 1 не обрабатывает SIGCHLD → дочерние процессы
+# становятся зомби (state = Z).
+#
+# Диагностика:
+#   docker compose -f broken/compose-zombie.yaml up -d
+#   sleep 3
+#   docker top dbg-zombie
+#   → увидите процессы в состоянии Z (zombie)
+#   docker exec dbg-zombie ps aux
+#   → [sh] <defunct> — зомби-процессы
+#
+# Fix: использовать --init (tini) или dumb-init как PID 1
+#   docker run --init alpine sh -c "..."
+
+services:
+  zombie-maker:
+    image: alpine:3.20
+    container_name: dbg-zombie
+    # Нет --init → sh как PID 1 не reap-ит зомби
+    # init: true    ← раскомментировать для fix
+    command: >
+      sh -c "
+        echo 'spawning children that will become zombies...'
+        for i in 1 2 3 4 5; do
+          sh -c 'echo child $$i started; exit 0' &
+        done
+        echo 'parent sleeping, zombies accumulate...'
+        sleep 120
+      "
+    restart: "no"

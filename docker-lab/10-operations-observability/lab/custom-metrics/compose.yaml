@@ -1,0 +1,42 @@
+# Custom metrics: приложение с /metrics endpoint для Prometheus
+#
+# Использование:
+#   docker compose -f lab/custom-metrics/compose.yaml up -d --build
+#
+# Доступ:
+#   App:         http://localhost:8096
+#   Metrics:     http://localhost:8096/metrics
+#   Prometheus:  http://localhost:9092
+#   Grafana:     http://localhost:3002 (admin/admin)
+#
+# Метрики:
+#   http_requests_total — счётчик запросов (counter)
+#   http_request_duration_seconds — время обработки (histogram)
+#   app_active_connections — текущие соединения (gauge)
+
+services:
+  app:
+    build: .
+    container_name: custom-metrics-app
+    ports:
+      - "8096:8080"
+
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    container_name: custom-metrics-prom
+    ports:
+      - "9092:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - app
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: custom-metrics-grafana
+    ports:
+      - "3002:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    depends_on:
+      - prometheus

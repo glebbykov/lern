@@ -1,0 +1,24 @@
+# Сценарий 14 — CPU throttling: контейнер тормозит
+#
+# cpus: "0.05" = 5% одного ядра → приложение заметно тормозит
+#
+# Диагностика:
+#   docker stats --no-stream dbg-cpu-throttle
+#   → CPU = 5.00%, но потребление хочет быть выше
+#   docker inspect dbg-cpu-throttle --format '{{.HostConfig.NanoCpus}}'
+#   → 50000000 (0.05 * 1e9)
+
+services:
+  throttled:
+    image: alpine:3.20
+    container_name: dbg-cpu-throttle
+    deploy:
+      resources:
+        limits:
+          cpus: "0.05"
+    # dd генерирует нагрузку на CPU, но ограничен 5% ядра
+    command: >
+      sh -c "echo 'CPU stress started' &&
+             dd if=/dev/urandom of=/dev/null bs=1M count=1000 2>&1 &&
+             echo 'done'"
+    restart: "no"

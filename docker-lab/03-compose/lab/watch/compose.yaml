@@ -1,0 +1,29 @@
+# docker compose watch — горячая перезагрузка без bind mount
+#
+# watch отслеживает изменения на хосте и:
+#   sync — копирует файл в контейнер (без перезапуска)
+#   rebuild — пересобирает и перезапускает контейнер
+#
+# Использование:
+#   docker compose -f lab/watch/compose.yaml watch
+#
+# Измени lab/watch/app/index.html → изменение видно в браузере мгновенно
+# Измени lab/watch/app/package.json → контейнер пересобирается
+
+services:
+  web:
+    image: nginx:1.27-alpine
+    ports:
+      - "8088:80"
+    volumes:
+      - ./app:/usr/share/nginx/html:ro
+    develop:
+      watch:
+        # Sync: изменение HTML/CSS → мгновенное обновление в контейнере
+        - action: sync
+          path: ./app
+          target: /usr/share/nginx/html
+
+        # Rebuild: изменение конфига → пересборка контейнера
+        - action: rebuild
+          path: ./nginx.conf

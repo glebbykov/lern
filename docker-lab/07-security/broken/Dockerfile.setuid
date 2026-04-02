@@ -1,0 +1,27 @@
+# Broken: обход cap_drop через setuid-бинарник
+#
+# cap_drop: ALL убирает capabilities, но setuid-бинарники
+# могут повысить привилегии через execve().
+# Без no-new-privileges:true это ДЫРА.
+#
+# Демо:
+# docker build -t setuid-test -f broken/Dockerfile.setuid .
+# docker run --rm --cap-drop ALL setuid-test
+# → процесс может повысить привилегии через setuid
+#
+# Fix:
+# docker run --rm --cap-drop ALL --security-opt no-new-privileges:true setuid-test
+# → setuid-бит игнорируется
+
+FROM alpine:3.20
+
+# Создаём setuid-бинарник (имитация)
+RUN cp /bin/id /usr/local/bin/suid-id && \
+    chmod u+s /usr/local/bin/suid-id
+
+RUN adduser -D appuser
+USER appuser
+
+# Без no-new-privileges: suid-id выполнится от root
+# С no-new-privileges: suid-id выполнится от appuser
+CMD ["sh", "-c", "echo 'id via normal:' && id && echo 'id via setuid:' && /usr/local/bin/suid-id"]

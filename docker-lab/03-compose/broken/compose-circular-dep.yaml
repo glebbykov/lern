@@ -1,0 +1,20 @@
+# Broken: циклическая зависимость — compose не может стартовать
+# service_a depends_on service_b, service_b depends_on service_a
+#
+# docker compose -f broken/compose-circular-dep.yaml up -d
+# → circular dependency: service_a → service_b → service_a
+
+services:
+  service_a:
+    image: alpine:3.20
+    command: ["echo", "a"]
+    depends_on:
+      service_b:
+        condition: service_started
+
+  service_b:
+    image: alpine:3.20
+    command: ["echo", "b"]
+    depends_on:
+      service_a:
+        condition: service_started

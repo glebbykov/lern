@@ -1,0 +1,32 @@
+# Broken: anonymous volume — потеря данных после docker compose down -v
+#
+# VOLUME в Dockerfile postgres создаёт anonymous volume.
+# docker compose down -v удаляет ВСЕ volumes, включая anonymous.
+# Без named volume данные теряются «магически».
+#
+# Демонстрация:
+# docker compose -f broken/compose-anon-volume.yaml up -d
+# (вставить данные)
+# docker compose -f broken/compose-anon-volume.yaml down -v
+# docker compose -f broken/compose-anon-volume.yaml up -d
+# → данные пропали, таблица не существует
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: anon-vol-db
+    environment:
+      POSTGRES_USER: appuser
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: appdb
+    # ❌ Нет volumes: → Dockerfile Postgres имеет VOLUME /var/lib/postgresql/data
+    # Это создаёт anonymous volume с UUID-именем
+    # docker compose down -v удалит его без предупреждения
+
+    # Fix: добавить named volume
+    # volumes:
+    #   - pg_data:/var/lib/postgresql/data
+
+# Fix: раскомментировать
+# volumes:
+#   pg_data:

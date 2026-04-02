@@ -1,0 +1,25 @@
+# Сценарий 15 — PID limit: fork bomb защита
+#
+# pids_limit: 5 → контейнер не может создать больше 5 процессов
+# Попытка создать 10 дочерних процессов завершится ошибкой
+#
+# Диагностика:
+#   docker compose -f broken/compose-pid-limit.yaml up
+#   docker logs dbg-pid-limit
+#   → sh: can't fork: Resource temporarily unavailable
+#   docker inspect dbg-pid-limit --format '{{.HostConfig.PidsLimit}}'
+#   → 5
+
+services:
+  forkbomb:
+    image: alpine:3.20
+    container_name: dbg-pid-limit
+    pids_limit: 5
+    command: >
+      sh -c "echo 'trying to fork 10 processes...' &&
+             for i in 1 2 3 4 5 6 7 8 9 10; do
+               sleep 60 &
+               echo \"forked $$i: pid=$$!\" || echo \"fork $$i FAILED\"
+             done &&
+             echo 'waiting...' && wait"
+    restart: "no"

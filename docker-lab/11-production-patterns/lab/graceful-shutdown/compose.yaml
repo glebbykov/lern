@@ -1,0 +1,16 @@
+# Graceful shutdown: приложение корректно обрабатывает SIGTERM
+#
+# Использование:
+#   docker compose -f lab/graceful-shutdown/compose.yaml up -d --build
+#   docker compose -f lab/graceful-shutdown/compose.yaml stop app
+#   docker compose -f lab/graceful-shutdown/compose.yaml logs app
+#   → "Received SIGTERM, finishing in-flight requests..."
+#   → "Graceful shutdown complete"
+
+services:
+  app:
+    build: .
+    container_name: graceful-app
+    ports:
+      - "8092:8080"
+    stop_grace_period: 15s    # docker ждёт 15 секунд перед SIGKILL
