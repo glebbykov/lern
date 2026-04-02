@@ -19,8 +19,8 @@ curl http://localhost:8082
 ```
 3. Проверьте DNS внутри контейнера:
 ```bash
-docker compose -f lab/compose.yaml exec toolbox nslookup api
-docker compose -f lab/compose.yaml exec toolbox nslookup db
+docker compose -f lab/compose.yaml exec toolbox nslookup api.
+docker compose -f lab/compose.yaml exec toolbox nslookup db.
 ```
 4. Изучите сети:
 ```bash
