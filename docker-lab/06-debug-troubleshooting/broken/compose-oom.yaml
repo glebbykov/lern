@@ -9,4 +9,4 @@ services:
     # /dev/shm — это tmpfs (RAM-backed), запись туда гарантированно
     # попадает в счётчик памяти cgroup. dd пишет 30 МБ → лимит 8 МБ → SIGKILL.
     # Симптом: ExitCode=137, OOMKilled=true.
-    command: ["sh", "-c", "echo 'writing to /dev/shm...' && dd if=/dev/zero of=/dev/shm/fill bs=1M count=30 status=progress && echo done"]
+    command: ["sh", "-c", "echo 'writing to /dev/shm...' && dd if=/dev/zero of=/dev/shm/fill bs=1M count=30 && echo done"]

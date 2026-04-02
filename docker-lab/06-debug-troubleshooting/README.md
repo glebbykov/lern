@@ -236,7 +236,7 @@ docker logs dbg-oom
 
 ```bash
 docker run -d --name mem-check alpine:3.20 \
-  sh -c "dd if=/dev/zero of=/dev/shm/fill bs=1M count=30 status=none; sleep 30"
+  sh -c "dd if=/dev/zero of=/dev/shm/fill bs=1M count=30; sleep 30"
 docker stats --no-stream mem-check
 # MEM USAGE / LIMIT → реальное потребление без лимита
 docker rm -f mem-check
