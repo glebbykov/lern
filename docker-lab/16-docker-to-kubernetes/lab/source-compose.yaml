@@ -1,3 +1,7 @@
+# Исходный compose для конвертации в Kubernetes-манифесты.
+# Это СПРАВОЧНЫЙ файл — запуск `docker compose up` потребует
+# Dockerfile для api-сервиса. Цель: показать маппинг Compose → K8s.
+
 services:
   api:
     build: .

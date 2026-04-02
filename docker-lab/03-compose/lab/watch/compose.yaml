@@ -8,15 +8,14 @@
 #   docker compose -f lab/watch/compose.yaml watch
 #
 # Измени lab/watch/app/index.html → изменение видно в браузере мгновенно
-# Измени lab/watch/app/package.json → контейнер пересобирается
+# Измени lab/watch/nginx.conf → контейнер пересобирается
 
 services:
   web:
     image: nginx:1.27-alpine
     ports:
       - "8088:80"
-    volumes:
-      - ./app:/usr/share/nginx/html:ro
+    # НЕ используем volumes (bind mount) — watch заменяет его
     develop:
       watch:
         # Sync: изменение HTML/CSS → мгновенное обновление в контейнере
@@ -27,3 +26,4 @@ services:
         # Rebuild: изменение конфига → пересборка контейнера
         - action: rebuild
           path: ./nginx.conf
+

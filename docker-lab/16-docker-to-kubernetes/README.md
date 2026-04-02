@@ -170,7 +170,9 @@ volumes:
 # Посмотреть hand-crafted манифесты
 cat lab/manifests/api-deployment.yaml
 cat lab/manifests/api-service.yaml
+cat lab/manifests/api-configmap.yaml
 cat lab/manifests/db-deployment.yaml
+cat lab/manifests/db-service.yaml
 cat lab/manifests/db-secret.yaml
 cat lab/manifests/db-pvc.yaml
 ```

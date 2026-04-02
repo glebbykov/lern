@@ -61,10 +61,7 @@ trivy-scan:
   stage: scan
   image: aquasec/trivy:latest
   script:
-    - trivy image --input image.tar
-        --exit-code 1
-        --severity HIGH,CRITICAL
-        --ignore-unfixed
+    - trivy image --input image.tar --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed
   dependencies:
     - build
 
