@@ -1,0 +1,10 @@
+services:
+  web:
+    image: nginx:1.27-alpine
+    ports:
+      - "8081:80"
+    volumes:
+      # Broken: путь ./nonexistent не существует на хосте.
+      # Docker создаст пустую директорию, но nginx вернёт 403 —
+      # потому что нет ни одного файла для отдачи.
+      - ./nonexistent:/usr/share/nginx/html:ro

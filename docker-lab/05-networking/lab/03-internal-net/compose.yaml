@@ -1,0 +1,29 @@
+services:
+  # frontend — имеет доступ в интернет через обычную сеть
+  frontend:
+    image: alpine:3.20
+    command: ["sleep", "infinity"]
+    networks:
+      - dmz
+
+  # backend — находится в internal сети, не имеет маршрута наружу
+  backend:
+    image: alpine:3.20
+    command: ["sleep", "infinity"]
+    networks:
+      - dmz
+      - internal
+
+  # db — только во внутренней сети, полностью изолирована
+  db:
+    image: redis:7-alpine
+    networks:
+      - internal
+
+networks:
+  dmz:
+    # Обычная сеть — контейнеры могут выходить в интернет
+  internal:
+    # internal: true — нет маршрута во внешние сети.
+    # Трафик возможен только между контейнерами внутри этой сети.
+    internal: true

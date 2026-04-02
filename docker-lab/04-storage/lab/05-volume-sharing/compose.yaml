@@ -1,0 +1,19 @@
+services:
+  writer:
+    image: alpine:3.20
+    # Каждые 2 секунды пишет timestamp в /data/log.txt
+    command: ["sh", "-c", "while true; do date >> /data/log.txt; sleep 2; done"]
+    volumes:
+      - shared_data:/data
+
+  reader:
+    image: alpine:3.20
+    # Следит за файлом и выводит новые строки в stdout
+    command: ["sh", "-c", "tail -f /data/log.txt"]
+    volumes:
+      - shared_data:/data   # тот же named volume, что и у writer
+    depends_on:
+      - writer
+
+volumes:
+  shared_data:

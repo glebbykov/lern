@@ -1,0 +1,26 @@
+services:
+  # Старая версия API — доступна только по своему имени
+  api-v1:
+    image: hashicorp/http-echo:1.0.0
+    command: ["-text=v1 response", "-listen=:5678"]
+    networks:
+      - app
+
+  # Новая версия API — получает alias "api", заменяя v1 с точки зрения клиентов
+  # Клиент обращается к имени "api" и попадает на v2 — без изменения кода клиента
+  api-v2:
+    image: hashicorp/http-echo:1.0.0
+    command: ["-text=v2 response", "-listen=:5678"]
+    networks:
+      app:
+        aliases:
+          - api   # теперь "api" резолвится в api-v2
+
+  toolbox:
+    image: alpine:3.20
+    command: ["sleep", "infinity"]
+    networks:
+      - app
+
+networks:
+  app:

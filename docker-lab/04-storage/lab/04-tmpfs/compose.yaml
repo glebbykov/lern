@@ -1,0 +1,10 @@
+services:
+  app:
+    image: alpine:3.20
+    # sleep infinity держит контейнер живым для экспериментов
+    command: ["sleep", "infinity"]
+    tmpfs:
+      # tmpfs монтируется прямо в RAM хоста.
+      # size=10m — ограничение по размеру.
+      # mode=0700 — директория доступна только root внутри контейнера.
+      - /run/secrets:size=10m,mode=0700
