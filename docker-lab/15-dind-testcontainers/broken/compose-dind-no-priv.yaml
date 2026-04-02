@@ -1,0 +1,9 @@
+# Broken: DinD без privileged — daemon не сможет стартовать
+services:
+  dind:
+    image: docker:27-dind
+    container_name: broken-dind-no-priv
+    # privileged: true   ← намеренно закомментировано
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    command: ["dockerd", "--host=unix:///var/run/docker.sock", "--tls=false"]

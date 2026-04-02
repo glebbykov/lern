@@ -1,4 +1,4 @@
-﻿# Docker Lab
+# Docker Lab
 
 Практический курс по Docker от базовых команд до production-паттернов.
 
@@ -13,7 +13,7 @@
 - Опционально для lint: `hadolint`, `yamllint`, `shellcheck`.
 
 ## Как проходить
-1. Идите по модулям сверху вниз (`00` -> `12`).
+1. Идите по модулям сверху вниз (`00` -> `16`).
 2. В каждом модуле работайте по структуре `lab/`, `broken/`, `checks/`.
 3. Ответьте на вопросы в `answers.md`.
 4. После завершения модуля выполните `cleanup.sh`.
@@ -45,6 +45,10 @@
 - [10-operations-observability](./10-operations-observability/README.md)
 - [11-production-patterns](./11-production-patterns/README.md)
 - [12-capstone-projects](./12-capstone-projects/README.md)
+- [13-cicd-github-actions](./13-cicd-github-actions/README.md)
+- [14-docker-init-devcontainers](./14-docker-init-devcontainers/README.md)
+- [15-dind-testcontainers](./15-dind-testcontainers/README.md)
+- [16-docker-to-kubernetes](./16-docker-to-kubernetes/README.md)
 
 ## Инструментирование
 - `make lint` — lint Dockerfile/YAML/Shell.

@@ -1,0 +1,23 @@
+services:
+  dind:
+    image: docker:27-dind
+    container_name: dind-lab
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: ""    # отключить TLS для простоты (только для учёбы)
+    volumes:
+      - dind-storage:/var/lib/docker    # persist layer cache
+      - ./workspace:/workspace
+    command: ["dockerd", "--host=tcp://0.0.0.0:2375", "--host=unix:///var/run/docker.sock", "--tls=false"]
+
+  ci-client:
+    image: docker:27-cli
+    container_name: dind-client
+    environment:
+      DOCKER_HOST: tcp://dind:2375
+    depends_on:
+      - dind
+    command: ["sh", "-c", "sleep 5 && docker info && sleep infinity"]
+
+volumes:
+  dind-storage:

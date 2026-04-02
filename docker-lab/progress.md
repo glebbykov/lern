@@ -16,6 +16,9 @@
 - [ ] 11-production-patterns — blue/green deployment, nginx proxy
 - [ ] 12-capstone-projects — финальные проекты (3 трека)
 - [ ] 13-cicd-github-actions — lint → build → test → scan → push
+- [ ] 14-docker-init-devcontainers — docker init, Dev Containers, devcontainer.json
+- [ ] 15-dind-testcontainers — DinD, socket mount, Testcontainers для интеграционных тестов
+- [ ] 16-docker-to-kubernetes — маппинг Compose → K8s, Deployment, Service, PVC, Secret
 
 ## Готовность к собеседованию
 
@@ -29,3 +32,8 @@
 - [ ] Могу написать GitHub Actions workflow: lint → build → test → scan → push
 - [ ] Настраивал Prometheus + Grafana для метрик контейнеров
 - [ ] Знаю как безопасно передавать секреты (не ENV, не ARG)
+- [ ] Могу использовать `docker init` и дорабатывать результат для production
+- [ ] Понимаю разницу socket mount vs DinD и риски каждого подхода
+- [ ] Умею писать интеграционные тесты с Testcontainers
+- [ ] Могу перевести compose.yaml в K8s-манифесты (Deployment, Service, PVC, Secret)
+- [ ] Объясняю разницу livenessProbe vs readinessProbe

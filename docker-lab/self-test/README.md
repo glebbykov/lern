@@ -53,3 +53,19 @@
 ## 12-capstone-projects
 1. Какие acceptance criteria обязательны для итогового проекта?
 2. Какие проверки доказывают production readiness?
+
+## 13-cicd-github-actions
+1. Зачем `permissions: packages: write` — почему нет глобально?
+2. `load: true` vs `push: true` — что выбрать для smoke test?
+
+## 14-docker-init-devcontainers
+1. Когда результат `docker init` достаточен, а когда нужна доработка?
+2. Чем Dev Container отличается от обычного `docker compose up`?
+
+## 15-dind-testcontainers
+1. Почему socket mount даёт фактически root-доступ к хосту?
+2. Чем DinD отличается от socket mount и когда что использовать?
+
+## 16-docker-to-kubernetes
+1. Чем `livenessProbe` отличается от `readinessProbe`?
+2. Почему `depends_on` не имеет аналога в Kubernetes?

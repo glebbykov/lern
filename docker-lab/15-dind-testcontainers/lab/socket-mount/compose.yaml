@@ -1,0 +1,8 @@
+services:
+  ci-runner:
+    image: docker:27-cli
+    container_name: ci-runner
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./workspace:/workspace
+    command: ["sh", "-c", "echo 'CI runner ready' && sleep infinity"]

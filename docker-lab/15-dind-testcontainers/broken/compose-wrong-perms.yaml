@@ -1,0 +1,9 @@
+# Broken: socket mount от non-root без группы docker
+services:
+  runner:
+    image: docker:27-cli
+    container_name: broken-wrong-perms
+    user: "1000:1000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: ["sh", "-c", "echo 'runner started' && sleep infinity"]

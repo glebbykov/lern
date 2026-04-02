@@ -1,0 +1,33 @@
+# Broken: нет readinessProbe — Pod получит трафик ДО готовности приложения
+# Результат: первые запросы вернут 502/connection refused
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-no-readiness
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: myapp:1.0.0
+          ports:
+            - containerPort: 8080
+          # Есть livenessProbe — K8s перезапустит если упал
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 10
+          # ❌ Нет readinessProbe — K8s не знает когда Pod ГОТОВ
+          # Pod будет принимать трафик сразу, даже если приложение
+          # ещё инициализируется (загрузка конфига, прогрев кеша)
+          resources:
+            limits:
+              memory: 128Mi

@@ -1,0 +1,23 @@
+# Broken: selector.matchLabels не совпадает с template.metadata.labels
+# Deployment не будет управлять ни одним Pod'ом
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-bad-selector
+  labels:
+    app: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api-v2         # ← ожидает label "api-v2"
+  template:
+    metadata:
+      labels:
+        app: api           # ← но Pod имеет label "api" → несовпадение!
+    spec:
+      containers:
+        - name: api
+          image: myapp:1.0.0
+          ports:
+            - containerPort: 8080
