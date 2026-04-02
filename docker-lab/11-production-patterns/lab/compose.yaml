@@ -1,4 +1,4 @@
-﻿services:
+services:
   app-blue:
     image: hashicorp/http-echo:1.0.0
     command: ["-text=blue", "-listen=:5678"]

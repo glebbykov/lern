@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 if grep -R --line-number -E 'image:\s*.+:latest' broken >/dev/null; then

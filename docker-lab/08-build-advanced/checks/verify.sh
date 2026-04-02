@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 docker build -t dockerlab/go-api:dev ./lab >/dev/null

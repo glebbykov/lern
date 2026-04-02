@@ -52,20 +52,21 @@ curl -s http://localhost:5000/v2/myapp/tags/list
 Тег — мутабельный указатель (можно перезаписать). Digest — хеш содержимого (неизменяем).
 
 ```bash
-# Получить digest образа
+# Способ 1: через docker inspect (надёжно, работает всегда после push)
 docker inspect localhost:5000/myapp:1.0.0 \
   --format '{{index .RepoDigests 0}}'
 # localhost:5000/myapp@sha256:abc123...
 
-# Или через buildx imagetools (после push)
+# Способ 2: через buildx imagetools (самый подробный, показывает платформы)
 docker buildx imagetools inspect localhost:5000/myapp:1.0.0
 
-# Получить digest через registry API
+# Способ 3: через registry API (требует правильный Accept header)
 curl -s \
   -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
   http://localhost:5000/v2/myapp/manifests/1.0.0 \
-  -D - 2>&1 | grep -i docker-content-digest
+  -I | grep -i docker-content-digest
 # Docker-Content-Digest: sha256:abc123...
+# Примечание: используй -I (HEAD-запрос), не -D - 2>&1, так надёжнее
 ```
 
 ### Почему тег != идентификатор

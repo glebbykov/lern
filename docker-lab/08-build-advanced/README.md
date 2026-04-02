@@ -5,8 +5,8 @@
 Неоптимальный Dockerfile — это медленные CI-сборки, огромные образы с лишними инструментами и ненужными CVE. Multi-stage build решает эти проблемы структурно.
 
 ```text
-Single-stage:   [golang:1.22]  →  образ ~900 MB (SDK + исходники + бинарник)
-Multi-stage:    [golang:1.22]  →  [distroless]  →  образ ~8 MB (только бинарник)
+Single-stage:   [golang:1.24]  →  образ ~900 MB (SDK + исходники + бинарник)
+Multi-stage:    [golang:1.24]  →  [distroless]  →  образ ~8 MB (только бинарник)
 ```
 
 ---
@@ -30,7 +30,7 @@ docker run --rm dockerlab/go-api:single ls /usr/local/go/bin/
 # Attack surface
 docker run --rm aquasec/trivy:latest image \
   --severity HIGH,CRITICAL dockerlab/go-api:single
-# Много CVE от golang:1.22
+# Много CVE от golang:1.24
 ```
 
 ---
@@ -41,7 +41,7 @@ docker run --rm aquasec/trivy:latest image \
 
 ```dockerfile
 # Стадия 1: builder — компилируем
-FROM golang:1.22-alpine AS builder
+FROM golang:1.24-alpine AS builder
 WORKDIR /src
 COPY src/go.mod ./
 RUN go mod download          # кешируемый слой
@@ -114,7 +114,7 @@ git checkout lab/src/main.go 2>/dev/null || sed -i '$ d' lab/src/main.go
 `--target` останавливает сборку на указанной стадии. Полезно для dev/test/prod из одного файла.
 
 ```dockerfile
-FROM golang:1.22-alpine AS builder
+FROM golang:1.24-alpine AS builder
 # ... компиляция ...
 
 FROM builder AS dev            # наследует builder — есть shell и инструменты

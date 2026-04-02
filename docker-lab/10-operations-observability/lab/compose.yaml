@@ -1,6 +1,7 @@
-﻿services:
+services:
   app:
     image: nginx:1.27-alpine
+    container_name: observability-app
     ports:
       - "8085:80"
     logging:
@@ -8,6 +9,14 @@
       options:
         max-size: "10m"
         max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 128M
+        reservations:
+          cpus: "0.10"
+          memory: 32M
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.49.1
@@ -16,6 +25,7 @@
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
 
@@ -27,3 +37,12 @@
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     depends_on:
       - cadvisor
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    depends_on:
+      - prometheus

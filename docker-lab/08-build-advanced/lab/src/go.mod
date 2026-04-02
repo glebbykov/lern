@@ -1,3 +1,3 @@
-﻿module dockerlab/go-api
+module dockerlab/go-api
 
-go 1.22
+go 1.24
