@@ -17,7 +17,11 @@ perform_task() {
 
 nice -n 10 bash -c "$(declare -f perform_task); perform_task 'Процесс с низким  приоритетом ' 4000000" &
 
-nice -n -10 bash -c "$(declare -f perform_task); perform_task 'Процесс с высоким приоритетом' 4000000" &
+# nice -n -10 (отрицательный приоритет) требует root / CAP_SYS_NICE.
+# Запусти через sudo, иначе получишь "Permission denied":
+#   sudo nice -n -10 bash -c "..."
+# Для обычного пользователя максимум — nice -n 0 (без повышения).
+sudo nice -n -10 bash -c "$(declare -f perform_task); perform_task 'Процесс с высоким приоритетом' 4000000" &
 
 wait
 echo "Все процессы завершены."

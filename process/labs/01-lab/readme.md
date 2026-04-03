@@ -2,6 +2,14 @@
 
 ---
 
+## Требования (установить до начала)
+
+```bash
+sudo apt install -y gcc build-essential pstree tmux lsof python3
+```
+
+---
+
 ## Задание 1. Теория: анатомия файлового дескриптора
 
 Объясни своими словами: что происходит на уровне ядра, когда процесс вызывает `open("/tmp/file.txt", O_RDWR)`.
@@ -25,7 +33,7 @@
 
 Опиши полный путь процесса от создания до удаления из таблицы:
 
-```
+```text
 fork() → состояния (R, S, D, T, Z, X) → exit() → wait()
 ```
 
@@ -72,7 +80,7 @@ pstree -sp $$
 
 Объясни роль каждого процесса.
 
-Если подключаешься по SSH — объясни, зачем три процесса sshd (master, privileged, session) и как работает privilege separation.
+Если в `pstree` видишь `sshd` — объясни, зачем три процесса sshd (master, privileged, session) и как работает privilege separation.
 
 ---
 
@@ -84,7 +92,13 @@ pstree -sp $$
 
 ```bash
 python3 -m http.server 8888 &
-curl http://localhost:8888 > /dev/null &
+SERVER_PID=$!
+
+# --limit-rate замедляет передачу — curl живёт дольше, успеваешь его инспектировать
+curl --limit-rate 1k http://localhost:8888 > /dev/null &
+CURL_PID=$!
+
+echo "server=$SERVER_PID  curl=$CURL_PID"
 ```
 
 Пока оба процесса живы, исследуй `/proc/PID/fd/` каждого:
@@ -173,6 +187,13 @@ exec 3<&-
 3. Как это приводит к ситуации «df показывает 100%, du показывает 50%» на production?
 4. Как диагностировать через `lsof +L1`?
 
+```bash
+# lsof видит fd других процессов только с правами root:
+sudo lsof +L1
+# или через /proc своего shell'а:
+ls -la /proc/$$/fd/
+```
+
 ---
 
 ## Задание 8. Теория + практика: демоны и double-fork
@@ -191,6 +212,16 @@ exec 3<&-
 | f | Закрытие fd 0, 1, 2 | Почему запись в закрытый pts даёт SIGPIPE? |
 
 Объясни: почему с systemd не нужен double-fork и чем отличаются Type=simple, Type=forking, Type=notify.
+
+**Дополнительно (необязательно):** посмотри реализацию double-fork в `process/daemon/simpled.c`.
+Сборка и запуск:
+
+```bash
+gcc process/daemon/simpled.c -o simpled
+sudo ./simpled
+ps aux | grep simpled
+sudo tail -f /var/log/simpled.log
+```
 
 ### Практическая часть
 
@@ -222,8 +253,12 @@ sudo systemctl start diskmon
 sudo systemctl status diskmon
 journalctl -u diskmon -f
 
-# Убей процесс — должен перезапуститься:
-sudo kill $(systemctl show diskmon -p MainPID --value)
+# Убей процесс — должен перезапуститься.
+# ВАЖНО: kill без -9 отправляет SIGTERM. Скрипт перехватывает SIGTERM
+# через trap → выполняет exit 0 → systemd видит код 0 → Restart=on-failure
+# НЕ перезапускает (on-failure срабатывает только при ненулевом exit).
+# Используй kill -9 (SIGKILL), чтобы гарантированно получить exit 137:
+sudo kill -9 $(systemctl show diskmon -p MainPID --value)
 sleep 6
 sudo systemctl status diskmon   # PID изменился?
 
@@ -357,6 +392,8 @@ ps aux | awk '$8 ~ /Z/'   # зомби исчезли?
 
 ## Задание 11. Практика + теория: nohup, disown, tmux — сравнение через fd
 
+> **Требование:** убедись что tmux установлен: `tmux -V`. Если нет — `sudo apt install tmux`.
+
 ### Практическая часть
 
 Запусти `sleep 600` тремя способами:
@@ -477,7 +514,7 @@ bash lab_helper.sh   # выбери опцию 5 (diagnostic challenge)
 
 Для каждой проблемы оформи мини-отчёт:
 
-```
+```markdown
 ## Проблема N
 
 **Симптомы:** что заметил (высокий CPU, много fd, зомби...)
@@ -501,7 +538,7 @@ bash lab_helper.sh   # выбери опцию 5 (diagnostic challenge)
 - Что на каждом шаге узнаёшь
 - Когда переходишь к следующему инструменту
 
-```
+```text
 Шаг 1: ps aux / top → ...
 Шаг 2: /proc/PID/... → ...
 Шаг 3: lsof -p PID → ...

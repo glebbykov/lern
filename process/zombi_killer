@@ -10,9 +10,16 @@ if [ -z "$zombie_pids" ]; then
   echo "[$(date)] Нет зомби-процессов." >> $LOGFILE
 else
   for pid in $zombie_pids; do
-    parent_pid=$(ps -o ppid= -p "$pid")
-    echo "[$(date)] Обнаружен зомби-процесс PID $pid. Завершаем родительский процесс PID $parent_pid." >> $LOGFILE
-    
+    parent_pid=$(ps -o ppid= -p "$pid" | tr -d ' ')
+    echo "[$(date)] Обнаружен зомби-процесс PID $pid. Родительский PID: $parent_pid." >> $LOGFILE
+
+    # Защита: не убивать PID 1 (init/systemd) или 0 — это катастрофа
+    if [ -z "$parent_pid" ] || [ "$parent_pid" -le 1 ]; then
+      echo "[$(date)] ПРОПУСК: родитель PID $parent_pid — системный процесс, пропускаем." >> $LOGFILE
+      continue
+    fi
+
+    echo "[$(date)] Завершаем родительский процесс PID $parent_pid." >> $LOGFILE
     # Убиваем родительский процесс
     kill -9 $parent_pid
     
