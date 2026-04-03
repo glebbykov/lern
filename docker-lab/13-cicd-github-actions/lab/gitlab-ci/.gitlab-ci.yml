@@ -1,15 +1,14 @@
-# ─────────────────────────────────────────────────────────────────
-# GitLab CI: Build → Test → Scan → Push
+# ──────────────────────────────────────────────────────────────────
+# GitLab CI: Lint → Build & Test → Scan → Push
 #
-# Аналог GitHub Actions workflow (examples/build-push.yml),
-# адаптированный для GitLab CI/CD.
+# Использование в этом репозитории:
+#   GitLab → Settings → CI/CD → General pipelines
+#   CI/CD configuration file:
+#     docker-lab/13-cicd-github-actions/lab/gitlab-ci/.gitlab-ci.yml
 #
-# Использование:
-#   Скопируй в .gitlab-ci.yml
-#   Настрой переменные в GitLab → Settings → CI/CD → Variables:
-#     - CI_REGISTRY_IMAGE (автоматически заполнен)
-#     - DOCKER_AUTH_CONFIG (для альтернативных registries)
-# ─────────────────────────────────────────────────────────────────
+# Переменные CI_REGISTRY_USER, CI_REGISTRY_PASSWORD, CI_REGISTRY
+# и CI_REGISTRY_IMAGE заполняются GitLab автоматически.
+# ──────────────────────────────────────────────────────────────────
 
 stages:
   - lint
@@ -18,71 +17,123 @@ stages:
   - push
 
 variables:
+  # Docker-in-Docker: демон запускается в service-контейнере
   DOCKER_HOST: tcp://docker:2376
   DOCKER_TLS_CERTDIR: "/certs"
-  IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+  # Тег образа: registry.gitlab.com/<ns>/<project>:sha-abc1234
+  IMAGE_SHA: $CI_REGISTRY_IMAGE:sha-$CI_COMMIT_SHORT_SHA
+  # Путь до Dockerfile в этом монорепо
+  BUILD_CONTEXT: docker-lab/13-cicd-github-actions/lab
+  DOCKERFILE: docker-lab/13-cicd-github-actions/lab/Dockerfile
 
-# ── Lint ──────────────────────────────────────────────────────
-lint-dockerfile:
+# Запускать pipeline только при изменениях в lab/ или этом файле
+workflow:
+  rules:
+    - changes:
+        - docker-lab/13-cicd-github-actions/lab/**/*
+        - docker-lab/13-cicd-github-actions/lab/gitlab-ci/.gitlab-ci.yml
+    - if: $CI_PIPELINE_SOURCE == "web"   # ручной запуск всегда
+
+# ── job 1: Lint ──────────────────────────────────────────────────
+lint:
   stage: lint
   image: hadolint/hadolint:v2.12.0-alpine
   script:
-    - hadolint Dockerfile --failure-threshold warning
+    # failure-threshold warning: предупреждения не ломают pipeline
+    - hadolint $DOCKERFILE --failure-threshold warning
 
-lint-yaml:
-  stage: lint
-  image: cytopia/yamllint:latest
-  script:
-    - yamllint -d relaxed docker-compose.yml || true
-
-# ── Build & Test ──────────────────────────────────────────────
+# ── job 2: Build & Smoke Test ────────────────────────────────────
 build:
   stage: build
   image: docker:27
   services:
-    - docker:27-dind
+    - name: docker:27-dind
+      alias: docker
+  needs: [lint]
   script:
-    - docker build -t $IMAGE_TAG .
-    # Smoke test
-    - docker run -d --name smoke -p 8080:8080 $IMAGE_TAG
-    - sleep 3
+    - docker build -t $IMAGE_SHA $BUILD_CONTEXT
+
+    # Smoke test: запустить контейнер, получить его IP, проверить /healthz
+    # В DinD порт-маппинг (-p) работает на уровне DinD-демона.
+    # Надёжнее — подключаться напрямую по IP контейнера.
+    - docker run -d --name smoke $IMAGE_SHA
+    - sleep 2
+    - SMOKE_IP=$(docker inspect smoke --format '{{.NetworkSettings.IPAddress}}')
     - apk add --no-cache curl
-    - curl --fail --retry 3 http://docker:8080/healthz
+    - curl --fail --retry 5 --retry-delay 1 http://$SMOKE_IP:8080/healthz
     - docker rm -f smoke
-    # Сохранить образ для следующего stage
-    - docker save $IMAGE_TAG -o image.tar
+
+    # Сохранить образ как артефакт для stage scan и push
+    - docker save $IMAGE_SHA -o image.tar
+
   artifacts:
     paths:
       - image.tar
     expire_in: 1 hour
 
-# ── Security Scan ─────────────────────────────────────────────
-trivy-scan:
+# ── job 3: Security Scan (Trivy) ─────────────────────────────────
+scan:
   stage: scan
-  image: aquasec/trivy:latest
+  # entrypoint: [""] — отключить собственный entrypoint Trivy,
+  # чтобы GitLab мог запустить произвольный script
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  needs:
+    - job: build
+      artifacts: true    # скачать image.tar из job build
   script:
-    - trivy image --input image.tar --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed
-  dependencies:
-    - build
+    # exit-code 1 → pipeline упадёт при HIGH/CRITICAL CVE
+    # ignore-unfixed → игнорировать CVE без доступного патча
+    - trivy image
+        --input image.tar
+        --exit-code 1
+        --severity HIGH,CRITICAL
+        --ignore-unfixed
+        --format table
 
-# ── Push to Registry ──────────────────────────────────────────
+# ── job 4: Push to GitLab Container Registry ─────────────────────
 push:
   stage: push
   image: docker:27
   services:
-    - docker:27-dind
+    - name: docker:27-dind
+      alias: docker
+  needs:
+    - job: build
+      artifacts: true    # image.tar
+    - job: scan
+      artifacts: false   # только ждём успеха, артефакты не нужны
+  # Пушить только из main и при git-тегах v*.*.*
   rules:
-    - if: $CI_COMMIT_BRANCH == "main"
-    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
   script:
     - docker load -i image.tar
+
+    # CI_REGISTRY_USER / CI_REGISTRY_PASSWORD / CI_REGISTRY
+    # — заполняются GitLab автоматически
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-    # Tag: sha + semver (если тег)
-    - docker push $IMAGE_TAG
+
+    # Всегда пушим sha-тег (иммутабельный)
+    - docker push $IMAGE_SHA
+
+    # latest — только из ветки main
+    - |
+      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
+        docker tag $IMAGE_SHA $CI_REGISTRY_IMAGE:latest
+        docker push $CI_REGISTRY_IMAGE:latest
+        echo "Pushed: $CI_REGISTRY_IMAGE:latest"
+      fi
+
+    # semver-теги: v1.3.0 → 1.3.0 и 1.3
     - |
       if [ -n "$CI_COMMIT_TAG" ]; then
-        docker tag $IMAGE_TAG $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
-        docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
+        VERSION="${CI_COMMIT_TAG#v}"          # убрать v-префикс
+        MINOR="${VERSION%.*}"                 # 1.3.0 → 1.3
+        docker tag $IMAGE_SHA $CI_REGISTRY_IMAGE:$VERSION
+        docker tag $IMAGE_SHA $CI_REGISTRY_IMAGE:$MINOR
+        docker push $CI_REGISTRY_IMAGE:$VERSION
+        docker push $CI_REGISTRY_IMAGE:$MINOR
+        echo "Pushed: $CI_REGISTRY_IMAGE:$VERSION и :$MINOR"
       fi
-  dependencies:
-    - build

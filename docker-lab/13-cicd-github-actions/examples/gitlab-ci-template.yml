@@ -1,0 +1,101 @@
+# ──────────────────────────────────────────────────────────────────
+# Шаблон: GitLab CI — Build → Test → Scan → Push
+#
+# Скопируй в .gitlab-ci.yml своего GitLab-проекта.
+# Dockerfile должен находиться в корне репозитория.
+# Замени APP_PORT на порт, который слушает твоё приложение.
+# ──────────────────────────────────────────────────────────────────
+
+stages:
+  - lint
+  - build
+  - scan
+  - push
+
+variables:
+  DOCKER_HOST: tcp://docker:2376
+  DOCKER_TLS_CERTDIR: "/certs"
+  IMAGE_SHA: $CI_REGISTRY_IMAGE:sha-$CI_COMMIT_SHORT_SHA
+  APP_PORT: "8080"   # ← замени на свой порт
+
+# ── Lint ──────────────────────────────────────────────────────────
+lint:
+  stage: lint
+  image: hadolint/hadolint:v2.12.0-alpine
+  script:
+    - hadolint Dockerfile --failure-threshold warning
+
+# ── Build & Smoke Test ────────────────────────────────────────────
+build:
+  stage: build
+  image: docker:27
+  services:
+    - name: docker:27-dind
+      alias: docker
+  needs: [lint]
+  script:
+    - docker build -t $IMAGE_SHA .
+    - docker run -d --name smoke $IMAGE_SHA
+    - sleep 2
+    - SMOKE_IP=$(docker inspect smoke --format '{{.NetworkSettings.IPAddress}}')
+    - apk add --no-cache curl
+    - curl --fail --retry 5 --retry-delay 1 http://$SMOKE_IP:$APP_PORT/healthz
+    - docker rm -f smoke
+    - docker save $IMAGE_SHA -o image.tar
+  artifacts:
+    paths:
+      - image.tar
+    expire_in: 1 hour
+
+# ── Security Scan ─────────────────────────────────────────────────
+scan:
+  stage: scan
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  needs:
+    - job: build
+      artifacts: true
+  script:
+    - trivy image
+        --input image.tar
+        --exit-code 1
+        --severity HIGH,CRITICAL
+        --ignore-unfixed
+        --format table
+
+# ── Push to Registry ──────────────────────────────────────────────
+push:
+  stage: push
+  image: docker:27
+  services:
+    - name: docker:27-dind
+      alias: docker
+  needs:
+    - job: build
+      artifacts: true
+    - job: scan
+      artifacts: false
+  rules:
+    # latest — только из ветки main
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    # semver-теги v1.2.3 — всегда
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+  script:
+    - docker load -i image.tar
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker push $IMAGE_SHA
+    - |
+      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
+        docker tag $IMAGE_SHA $CI_REGISTRY_IMAGE:latest
+        docker push $CI_REGISTRY_IMAGE:latest
+      fi
+    - |
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        VERSION="${CI_COMMIT_TAG#v}"
+        MINOR="${VERSION%.*}"
+        docker tag $IMAGE_SHA $CI_REGISTRY_IMAGE:$VERSION
+        docker tag $IMAGE_SHA $CI_REGISTRY_IMAGE:$MINOR
+        docker push $CI_REGISTRY_IMAGE:$VERSION
+        docker push $CI_REGISTRY_IMAGE:$MINOR
+      fi
