@@ -1,0 +1,33 @@
+# Нормализация окончаний строк: LF в репо, платформенные при checkout
+* text=auto eol=lf
+
+# Бинарные файлы — без изменений
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.tar.gz binary
+
+# Скрипты — явно LF (shebang ломается с CRLF)
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Конфиги и манифесты — явно LF
+*.yaml text eol=lf
+*.yml text eol=lf
+Dockerfile text eol=lf
+*.dockerfile text eol=lf
+*.go text eol=lf
+*.mod text eol=lf
+*.sum text eol=lf
+*.py text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+
+# PowerShell — CRLF (Windows)
+*.ps1 text eol=crlf
