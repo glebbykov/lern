@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 KUBECONFIG_PATH="${1:-./kubeconfig.local}"

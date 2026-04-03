@@ -1,4 +1,4 @@
-﻿# 02-get-describe-logs-exec
+# 02-get-describe-logs-exec
 
 ## Цель
 Отработать базовый цикл диагностики Pod.

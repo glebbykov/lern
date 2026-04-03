@@ -1,4 +1,4 @@
-﻿name: lint-yaml
+name: lint-yaml
 
 on:
   push:

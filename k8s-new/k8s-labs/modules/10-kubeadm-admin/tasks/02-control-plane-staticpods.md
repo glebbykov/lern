@@ -1,4 +1,4 @@
-﻿# 02-control-plane-staticpods
+# 02-control-plane-staticpods
 
 ## Задача
 Проверить static pod манифесты и их логи.

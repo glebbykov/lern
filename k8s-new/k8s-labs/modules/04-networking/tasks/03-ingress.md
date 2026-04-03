@@ -1,4 +1,4 @@
-﻿# 03-ingress
+# 03-ingress
 
 ## Задача
 Настроить ingress на один host и path `/`.

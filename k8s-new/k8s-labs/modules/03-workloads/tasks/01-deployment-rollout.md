@@ -1,4 +1,4 @@
-﻿# 01-deployment-rollout
+# 01-deployment-rollout
 
 ## Шаги
 1. Применить `deployment/v1`.

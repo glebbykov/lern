@@ -1,4 +1,4 @@
-﻿# project-a-platform-namespace
+# project-a-platform-namespace
 
 Цель: собрать минимальный platform namespace с базовой безопасностью и лимитами.
 

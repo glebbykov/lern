@@ -1,4 +1,4 @@
-﻿# 03-resources-qos-oom
+# 03-resources-qos-oom
 
 ## Цель
 Понять влияние requests/limits и QoS на поведение контейнера.

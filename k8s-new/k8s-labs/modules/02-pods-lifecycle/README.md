@@ -1,4 +1,4 @@
-﻿# 02-pods-lifecycle
+# 02-pods-lifecycle
 
 Цель: понять жизненный цикл Pod, роль initContainer и probes.
 

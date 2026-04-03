@@ -1,4 +1,4 @@
-﻿# 01-events-and-conditions
+# 01-events-and-conditions
 
 ## Задача
 Научиться читать таймлайн деградации из events.

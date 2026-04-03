@@ -1,4 +1,4 @@
-﻿# 00-kubectl-cheatsheet
+# 00-kubectl-cheatsheet
 
 ## Частые команды
 ```bash

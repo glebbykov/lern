@@ -1,4 +1,4 @@
-﻿# 02-taints-tolerations
+# 02-taints-tolerations
 
 ## Задача
 Добавить taint на ноду и разрешить подам садиться через toleration.

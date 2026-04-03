@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Stop"
 $manifest = "https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.7.2/components.yaml"
 
 kubectl apply -f $manifest

@@ -1,4 +1,4 @@
-﻿# 01-services-dns
+# 01-services-dns
 
 ## Задача
 Развернуть приложение и проверить DNS-resolve сервиса из debug pod.

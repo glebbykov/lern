@@ -1,4 +1,4 @@
-﻿# project-b-stateful-service
+# project-b-stateful-service
 
 Цель: stateful-сервис с сохранением данных и регулярным бэкапом.
 

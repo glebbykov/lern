@@ -1,4 +1,4 @@
-﻿apiVersion: v2
+apiVersion: v2
 name: demo-app
 description: Minimal demo chart for k8s-labs
 version: 0.1.0

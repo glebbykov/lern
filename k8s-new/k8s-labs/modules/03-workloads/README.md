@@ -1,4 +1,4 @@
-﻿# 03-workloads
+# 03-workloads
 
 Цель: выбирать правильный workload под задачу.
 

@@ -1,4 +1,4 @@
-﻿# 01-drain-cordon
+# 01-drain-cordon
 
 ## Команды
 ```bash

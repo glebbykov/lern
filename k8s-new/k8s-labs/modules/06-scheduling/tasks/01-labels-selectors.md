@@ -1,4 +1,4 @@
-﻿# 01-labels-selectors
+# 01-labels-selectors
 
 ## Задача
 Промаркировать ноды и запланировать deployment через `nodeSelector`.

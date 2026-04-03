@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference = "Continue"
+$ErrorActionPreference = "Continue"
 $root = Resolve-Path "$PSScriptRoot/../.."
 $status = 0
 

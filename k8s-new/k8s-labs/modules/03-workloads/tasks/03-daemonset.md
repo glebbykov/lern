@@ -1,4 +1,4 @@
-﻿# 03-daemonset
+# 03-daemonset
 
 ## Цель
 Убедиться, что DaemonSet запускает Pod на каждом узле.

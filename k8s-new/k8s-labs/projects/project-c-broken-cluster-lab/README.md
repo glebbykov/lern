@@ -1,4 +1,4 @@
-﻿# project-c-broken-cluster-lab
+# project-c-broken-cluster-lab
 
 Цель: набор типовых поломок и runbook для диагностики.
 

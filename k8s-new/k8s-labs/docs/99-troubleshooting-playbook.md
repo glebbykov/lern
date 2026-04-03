@@ -1,4 +1,4 @@
-﻿# 99-troubleshooting-playbook
+# 99-troubleshooting-playbook
 
 ## Runbook: 502/504
 1. Проверить ingress controller и ingress resource.

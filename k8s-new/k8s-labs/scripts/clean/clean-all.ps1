@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference = "Continue"
+$ErrorActionPreference = "Continue"
 $root = Resolve-Path "$PSScriptRoot/../.."
 
 Get-ChildItem "$root/modules" -Directory | ForEach-Object {

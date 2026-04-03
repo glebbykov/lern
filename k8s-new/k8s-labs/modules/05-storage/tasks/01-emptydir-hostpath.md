@@ -1,4 +1,4 @@
-﻿# 01-emptydir-hostpath
+# 01-emptydir-hostpath
 
 ## Задача
 Проверить жизненный цикл данных для `emptyDir` и `hostPath`.

@@ -1,4 +1,4 @@
-﻿# 02-metrics-server-top
+# 02-metrics-server-top
 
 ## Задача
 Проверить текущую нагрузку по node/pod.

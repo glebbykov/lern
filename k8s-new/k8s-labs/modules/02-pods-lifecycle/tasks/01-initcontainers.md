@@ -1,4 +1,4 @@
-﻿# 01-initcontainers
+# 01-initcontainers
 
 ## Цель
 Собрать Pod с initContainer, который ждет DNS и готовит данные.

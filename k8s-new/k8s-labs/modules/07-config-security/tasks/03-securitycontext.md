@@ -1,4 +1,4 @@
-﻿# 03-securitycontext
+# 03-securitycontext
 
 ## Задача
 Запустить workload с ограничениями безопасности.

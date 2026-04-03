@@ -1,4 +1,4 @@
-﻿# 02-serviceaccount-rbac
+# 02-serviceaccount-rbac
 
 ## Задача
 Создать SA, Role и RoleBinding только на чтение Pod в namespace `lab`.

@@ -1,4 +1,4 @@
-﻿# 04-networkpolicy
+# 04-networkpolicy
 
 ## Задача
 Сделать default deny и затем точечно разрешить DNS и доступ к приложению.

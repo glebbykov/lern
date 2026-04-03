@@ -1,4 +1,4 @@
-﻿# 03-statefulset-with-pvc
+# 03-statefulset-with-pvc
 
 ## Задача
 Запустить StatefulSet с `volumeClaimTemplates` и headless Service.

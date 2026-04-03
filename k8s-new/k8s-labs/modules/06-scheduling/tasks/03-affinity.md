@@ -1,4 +1,4 @@
-﻿# 03-affinity
+# 03-affinity
 
 ## Задача
 Добавить node affinity и проверить решение scheduler.

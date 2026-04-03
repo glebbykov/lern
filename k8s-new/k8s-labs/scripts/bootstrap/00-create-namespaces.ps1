@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Stop"
 $root = Resolve-Path "$PSScriptRoot/../.."
 
 kubectl apply -f "$root/common/namespaces/lab.yaml"

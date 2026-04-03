@@ -1,4 +1,4 @@
-﻿name: validate-kustomize
+name: validate-kustomize
 
 on:
   push:

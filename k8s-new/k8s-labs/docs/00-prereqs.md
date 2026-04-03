@@ -1,4 +1,4 @@
-﻿# 00-prereqs
+# 00-prereqs
 
 ## Цели
 - Понимать Linux networking: IP, route, DNS, iptables/nftables, conntrack.

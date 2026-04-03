@@ -1,4 +1,4 @@
-﻿# 00-cluster-baseline
+# 00-cluster-baseline
 
 ## Инвентаризация
 ```bash

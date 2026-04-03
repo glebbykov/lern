@@ -1,4 +1,4 @@
-﻿# 04-statefulset-basics
+# 04-statefulset-basics
 
 ## Цель
 Понять стабильные имена Pod и работу headless Service.

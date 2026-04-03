@@ -1,4 +1,4 @@
-﻿# 01-context-and-namespaces
+# 01-context-and-namespaces
 
 ## Цель
 Научиться переключать контексты и работать с namespace.

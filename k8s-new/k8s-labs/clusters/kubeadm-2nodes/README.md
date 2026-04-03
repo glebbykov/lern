@@ -1,4 +1,4 @@
-﻿# kubeadm-2nodes
+# kubeadm-2nodes
 
 Минимальный профиль стенда:
 - 1 control-plane
