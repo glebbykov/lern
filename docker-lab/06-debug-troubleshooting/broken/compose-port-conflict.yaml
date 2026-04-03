@@ -1,4 +1,4 @@
-﻿services:
+services:
   app1:
     image: nginx:1.27-alpine
     ports:

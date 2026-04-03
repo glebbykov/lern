@@ -1,4 +1,4 @@
-﻿# Capstone: Security-first
+# Capstone: Security-first
 
 ## ТЗ
 Соберите сервис с приоритетом на безопасность runtime и release.

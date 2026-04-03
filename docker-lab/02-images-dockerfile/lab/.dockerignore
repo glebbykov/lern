@@ -1,4 +1,4 @@
-﻿.git
+.git
 .gitignore
 __pycache__/
 *.pyc

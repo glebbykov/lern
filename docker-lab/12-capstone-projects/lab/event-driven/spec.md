@@ -1,4 +1,4 @@
-﻿# Capstone: Event-driven
+# Capstone: Event-driven
 
 ## ТЗ
 Соберите producer/consumer pipeline с брокером сообщений.

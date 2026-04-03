@@ -1,4 +1,4 @@
-﻿# Ответы: 00-overview
+# Ответы: 00-overview
 
 ## Результаты проверки
 - [ ] `docker version`

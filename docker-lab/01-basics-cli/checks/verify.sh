@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 docker run -d --name cli-nginx -p 8080:80 nginx:1.27-alpine >/dev/null

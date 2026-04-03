@@ -1,4 +1,4 @@
-﻿services:
+services:
   edge:
     image: nginx:1.27-alpine
     volumes:

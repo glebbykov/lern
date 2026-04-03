@@ -1,4 +1,4 @@
-﻿# Capstone: Web + DB + Cache
+# Capstone: Web + DB + Cache
 
 ## ТЗ
 Соберите API сервис с Postgres и Redis, миграциями и healthchecks.

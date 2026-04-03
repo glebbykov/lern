@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 docker rm -f cli-crashloop >/dev/null 2>&1 || true

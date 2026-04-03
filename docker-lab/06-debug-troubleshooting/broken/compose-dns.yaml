@@ -1,4 +1,4 @@
-﻿services:
+services:
   api:
     image: hashicorp/http-echo:1.0.0
     command: ["-text=ok", "-listen=:5678"]

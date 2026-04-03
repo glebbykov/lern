@@ -1,4 +1,4 @@
-﻿# Common Issues
+# Common Issues
 
 ## Docker daemon is not running
 - Symptom: `Cannot connect to the Docker daemon`.

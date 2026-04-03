@@ -1,4 +1,4 @@
-﻿# Ответы: 10-operations-observability
+# Ответы: 10-operations-observability
 
 ## Результаты проверки
 - [ ] App доступен

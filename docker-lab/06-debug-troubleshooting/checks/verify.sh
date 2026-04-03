@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 # This module is diagnostic-first; verification checks that scenarios are reproducible.

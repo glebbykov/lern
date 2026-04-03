@@ -1,4 +1,4 @@
-﻿# Ответы: 02-images-dockerfile
+# Ответы: 02-images-dockerfile
 
 ## Результаты проверки
 - [ ] Образ собран

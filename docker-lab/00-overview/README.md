@@ -1,4 +1,4 @@
-﻿# 00. Overview и установка
+# 00. Overview и установка
 
 ## Цель
 Подготовить рабочую среду и зафиксировать базовую ментальную модель Docker: `image`, `container`, `layer`, `registry`, `engine`, `compose`.

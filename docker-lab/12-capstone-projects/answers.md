@@ -1,4 +1,4 @@
-﻿# Ответы: 12-capstone-projects
+# Ответы: 12-capstone-projects
 
 ## Выбранный трек
 - 

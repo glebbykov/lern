@@ -1,4 +1,4 @@
-﻿# Common Capstone Failures
+# Common Capstone Failures
 
 - Нет сценария восстановления после сбоя.
 - Нет автоматической проверки готовности стека.
