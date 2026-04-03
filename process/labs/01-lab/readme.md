@@ -392,7 +392,10 @@ ps aux | awk '$8 ~ /Z/'   # зомби исчезли?
 
 ## Задание 11. Практика + теория: nohup, disown, tmux — сравнение через fd
 
-> **Требование:** убедись что tmux установлен: `tmux -V`. Если нет — `sudo apt install tmux`.
+> **Требование:** убедись что tmux установлен:
+> ```bash
+> command -v tmux || sudo apt install -y tmux
+> ```
 
 ### Практическая часть
 
