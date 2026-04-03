@@ -53,3 +53,62 @@ require_pvc_bound() {
   phase=$(kubectl -n "$ns" get pvc "$pvc" -o jsonpath='{.status.phase}' 2>/dev/null || true)
   [[ "$phase" == "Bound" ]] || fail "pvc/$pvc phase is '$phase', expected 'Bound'"
 }
+
+# ── New helper functions ──────────────────────────────────────
+
+require_storageclass() {
+  local sc="${1:-}"
+  if [[ -n "$sc" ]]; then
+    kubectl get sc "$sc" >/dev/null 2>&1 || fail "storageclass/$sc not found"
+  else
+    local count
+    count=$(kubectl get sc --no-headers 2>/dev/null | wc -l | tr -d ' ')
+    [[ "${count:-0}" -ge 1 ]] || fail "no StorageClass found in cluster"
+  fi
+}
+
+require_job_complete() {
+  local ns="$1"
+  local name="$2"
+  local timeout="${3:-120}"
+  kubectl -n "$ns" get job "$name" >/dev/null 2>&1 || fail "job/$name not found in ns/$ns"
+  local succeeded
+  # Wait for job to complete (up to timeout seconds)
+  for i in $(seq 1 "$timeout"); do
+    succeeded=$(kubectl -n "$ns" get job "$name" -o jsonpath='{.status.succeeded}' 2>/dev/null || true)
+    [[ "${succeeded:-0}" -ge 1 ]] && return 0
+    sleep 1
+  done
+  fail "job/$name did not complete within ${timeout}s"
+}
+
+require_pod_phase() {
+  local ns="$1"
+  local label="$2"
+  local expected="$3"
+  local phase
+  phase=$(kubectl -n "$ns" get pod -l "$label" -o jsonpath='{.items[0].status.phase}' 2>/dev/null || true)
+  [[ "$phase" == "$expected" ]] || fail "pod with label $label phase='$phase', expected='$expected'"
+}
+
+require_pod_condition() {
+  local ns="$1"
+  local pod_name="$2"
+  local expected_reason="$3"
+  # Check container statuses for the expected reason (OOMKilled, CrashLoopBackOff, ImagePullBackOff, etc.)
+  local reason
+  reason=$(kubectl -n "$ns" get pod "$pod_name" -o jsonpath='{.status.containerStatuses[0].state.waiting.reason}' 2>/dev/null || true)
+  [[ "$reason" == "$expected_reason" ]] && return 0
+  reason=$(kubectl -n "$ns" get pod "$pod_name" -o jsonpath='{.status.containerStatuses[0].lastState.terminated.reason}' 2>/dev/null || true)
+  [[ "$reason" == "$expected_reason" ]] && return 0
+  fail "pod/$pod_name expected reason='$expected_reason', got waiting.reason or lastState"
+}
+
+require_security_context() {
+  local ns="$1"
+  local kind="$2"
+  local name="$3"
+  local sc
+  sc=$(kubectl -n "$ns" get "$kind" "$name" -o jsonpath='{.spec.template.spec.containers[0].securityContext}' 2>/dev/null || true)
+  [[ -n "$sc" && "$sc" != "{}" ]] || fail "$kind/$name has no securityContext"
+}

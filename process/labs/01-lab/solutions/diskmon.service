@@ -1,0 +1,21 @@
+[Unit]
+Description=Disk Usage Monitor
+Documentation=man:df(1)
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/opt/diskmon.sh
+Restart=on-failure
+RestartSec=5
+
+# Лимит fd — демонстрация для задания 12
+LimitNOFILE=4096
+
+# Логирование через journald (stdout/stderr → journal)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=diskmon
+
+[Install]
+WantedBy=multi-user.target

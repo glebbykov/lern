@@ -19,6 +19,16 @@ spec:
         image: redis:7.2-alpine
         ports:
         - containerPort: 6379
+        readinessProbe:
+          tcpSocket:
+            port: 6379
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 6379
+          initialDelaySeconds: 15
+          periodSeconds: 20
         volumeMounts:
         - name: data
           mountPath: /data
@@ -29,6 +39,8 @@ spec:
           limits:
             cpu: 300m
             memory: 512Mi
+        securityContext:
+          allowPrivilegeEscalation: false
   volumeClaimTemplates:
   - metadata:
       name: data

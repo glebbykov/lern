@@ -5,7 +5,7 @@
 ## Требования (установить до начала)
 
 ```bash
-sudo apt install -y gcc build-essential pstree tmux lsof python3
+sudo apt install -y gcc build-essential psmisc tmux lsof python3 strace sysstat
 ```
 
 ---
@@ -88,14 +88,17 @@ pstree -sp $$
 
 ### Практическая часть
 
-Запусти:
-
 ```bash
-python3 -m http.server 8888 &
+# Создай большой файл, чтобы передача заняла время
+dd if=/dev/urandom of=/tmp/bigfile.dat bs=1M count=50
+
+# Запусти http-сервер
+python3 -m http.server 8888 -d /tmp &
 SERVER_PID=$!
 
-# --limit-rate замедляет передачу — curl живёт дольше, успеваешь его инспектировать
-curl --limit-rate 1k http://localhost:8888 > /dev/null &
+# --limit-rate замедляет curl — он живёт дольше, успеваешь его инспектировать.
+# Загружаем созданный 50 МБ файл со скоростью 10 КБ/с → curl проживёт ~80 мин.
+curl --limit-rate 10k http://localhost:8888/bigfile.dat > /dev/null &
 CURL_PID=$!
 
 echo "server=$SERVER_PID  curl=$CURL_PID"
@@ -107,6 +110,25 @@ echo "server=$SERVER_PID  curl=$CURL_PID"
 - Какие из них сокеты, какие файлы
 - Найди listen-сокет сервера
 - Определи, какой fd отвечает за соединение с curl
+
+```bash
+# Сколько fd открыто
+ls /proc/$SERVER_PID/fd/ | wc -l
+ls /proc/$CURL_PID/fd/ | wc -l
+
+# Тип каждого fd
+ls -la /proc/$SERVER_PID/fd/
+# Найди socket:[...] — это сокеты
+# Найди /dev/null, /dev/pts — стандартные
+
+# Через lsof — сетевые соединения
+lsof -p $SERVER_PID -i
+lsof -p $CURL_PID -i
+
+# Очистка
+kill $SERVER_PID $CURL_PID 2>/dev/null
+rm -f /tmp/bigfile.dat
+```
 
 ### Теоретическая часть
 
@@ -128,7 +150,7 @@ echo "server=$SERVER_PID  curl=$CURL_PID"
 
 ### Практическая часть
 
-Напиши скрипт `worker.sh`:
+Напиши скрипт `worker.sh` (решение см. в `solutions/worker.sh`):
 
 - При SIGTERM — graceful shutdown: вывести сообщение, удалить lock-файл `/tmp/worker.lock`, выйти
 - При SIGINT — игнорировать
@@ -166,13 +188,19 @@ exec 3</tmp/big.txt
 # 3. Удали файл
 rm /tmp/big.txt
 
-# 4. Докажи что файл исчез с диска
-ls /tmp/big.txt
+# 4. Докажи что файл исчез из файловой системы
+ls /tmp/big.txt 2>&1   # No such file or directory
 
 # 5. Докажи что данные доступны через fd
-wc -c <&3
+wc -c <&3              # 10485760 (10 MiB)
 
-# 6. Закрой fd
+# 6. Найди файл через /proc
+ls -la /proc/$$/fd/3   # /tmp/big.txt (deleted)
+
+# 7. Найди через lsof +L1 (нужен root для чужих процессов)
+lsof +L1 2>/dev/null | grep big.txt
+
+# 8. Закрой fd — теперь ядро освободит inode и блоки
 exec 3<&-
 ```
 
@@ -225,7 +253,8 @@ sudo tail -f /var/log/simpled.log
 
 ### Практическая часть
 
-Создай systemd-сервис для скрипта, который каждые 30 секунд пишет использование диска.
+Создай systemd-сервис для скрипта, который каждые 30 секунд пишет использование диска
+(решение см. в `solutions/diskmon.service`).
 
 Скрипт `/opt/diskmon.sh`:
 
@@ -248,6 +277,10 @@ Unit-файл `/etc/systemd/system/diskmon.service`:
 Протестируй:
 
 ```bash
+sudo cp solutions/diskmon.sh /opt/diskmon.sh
+sudo chmod +x /opt/diskmon.sh
+sudo cp solutions/diskmon.service /etc/systemd/system/
+
 sudo systemctl daemon-reload
 sudo systemctl start diskmon
 sudo systemctl status diskmon
@@ -511,7 +544,7 @@ python3 fd_stress.py
 bash lab_helper.sh   # выбери опцию 5 (diagnostic challenge)
 ```
 
-Не читая код скрипта, используя только `ps`, `/proc`, `lsof`, `strace`, найди три проблемы.
+Не читая код скрипта, используя только `ps`, `/proc`, `lsof`, `strace`, найди **четыре** проблемы.
 
 ### Отчёт
 
@@ -520,7 +553,7 @@ bash lab_helper.sh   # выбери опцию 5 (diagnostic challenge)
 ```markdown
 ## Проблема N
 
-**Симптомы:** что заметил (высокий CPU, много fd, зомби...)
+**Симптомы:** что заметил (высокий CPU, много fd, зомби, диск...)
 
 **Диагностика:** какие команды выполнил и что увидел
   $ команда1
@@ -546,4 +579,173 @@ bash lab_helper.sh   # выбери опцию 5 (diagnostic challenge)
 Шаг 2: /proc/PID/... → ...
 Шаг 3: lsof -p PID → ...
 Шаг 4: strace -p PID → ...
+Шаг 5: /proc/PID/status (context switches) → ...
 ```
+
+---
+
+## Задание 14. Практика + теория: strace — трассировка системных вызовов
+
+### Теоретическая часть
+
+Ответь на вопросы:
+
+1. Что такое системный вызов и чем он отличается от вызова библиотечной функции?
+2. Как `strace` перехватывает syscalls (ptrace API)?
+3. Почему `strace` замедляет процесс в 10–100 раз?
+4. Чем `strace -e trace=network` отличается от `strace -e trace=file`?
+
+### Практическая часть
+
+**Упражнение A: анатомия простой команды**
+
+```bash
+# Трассировка ls — увидеть системные вызовы
+strace -c ls /tmp 2>&1 | tail -20
+# -c → статистика: сколько раз каждый syscall вызван
+
+# Полная трассировка с временем
+strace -ttt -T ls /tmp 2>/tmp/strace_ls.log
+head -30 /tmp/strace_ls.log
+```
+
+Найди в выводе:
+- `execve()` — запуск бинарника
+- `openat()` — открытие файлов/директорий
+- `getdents64()` — чтение содержимого директории
+- `write()` — вывод на stdout
+
+**Упражнение B: диагностика зависшего процесса**
+
+```bash
+# Запусти процесс, который «зависает» на DNS
+strace -p $(pgrep -f "python3 -m http.server" | head -1) -e trace=network 2>&1 | head -20
+# Или на новом процессе:
+strace -e trace=network python3 -c "import urllib.request; urllib.request.urlopen('http://httpbin.org/delay/5')" 2>&1
+```
+
+**Упражнение C: подсчёт syscalls**
+
+```bash
+# Сравни два способа копирования файла:
+dd if=/dev/zero of=/tmp/testfile bs=1M count=10 2>/dev/null
+
+strace -c cp /tmp/testfile /tmp/testfile2 2>&1 | tail -5
+strace -c dd if=/tmp/testfile of=/tmp/testfile3 bs=4k 2>&1 | tail -5
+strace -c dd if=/tmp/testfile of=/tmp/testfile4 bs=1M 2>&1 | tail -5
+
+# Сколько раз вызван read/write для каждого bs?
+# Почему больший bs = меньше syscalls = быстрее?
+
+rm -f /tmp/testfile*
+```
+
+**Упражнение D: strace работающего процесса**
+
+```bash
+sleep 300 &
+PID=$!
+
+# Подключиться к работающему процессу
+sudo strace -p $PID -e trace=signal 2>&1 &
+STRACE_PID=$!
+
+# Послать сигнал и увидеть его в strace
+kill -USR1 $PID
+sleep 1
+kill $STRACE_PID $PID 2>/dev/null
+```
+
+---
+
+## Задание 15. Теория + практика: cgroups и namespaces — основа контейнеров
+
+### Теоретическая часть
+
+Ответь на вопросы:
+
+1. Что такое cgroup и какие ресурсы можно ограничить (cpu, memory, io, pids)?
+2. Чем отличаются cgroup v1 и cgroup v2? Какой используется в твоей системе?
+3. Что такое namespace? Перечисли 7 типов (mnt, pid, net, uts, ipc, user, cgroup) и что каждый изолирует.
+4. Как `docker run` использует cgroups + namespaces вместе?
+
+### Практическая часть А: cgroups — ограничение ресурсов
+
+```bash
+# Какая версия cgroup?
+mount | grep cgroup
+# cgroup2 → unified hierarchy
+
+# Создать cgroup и ограничить память до 50 МБ
+sudo mkdir -p /sys/fs/cgroup/lab_test
+echo "52428800" | sudo tee /sys/fs/cgroup/lab_test/memory.max
+echo "0" | sudo tee /sys/fs/cgroup/lab_test/memory.swap.max
+
+# Запустить процесс в этой cgroup
+sudo bash -c 'echo $$ > /sys/fs/cgroup/lab_test/cgroup.procs && python3 -c "
+import os
+data = []
+try:
+    while True:
+        data.append(b\"x\" * 1024 * 1024)  # +1 MB каждую итерацию
+        print(f\"Allocated: {len(data)} MB\")
+except MemoryError:
+    print(f\"MemoryError at {len(data)} MB\")
+"'
+# Процесс будет убит OOM Killer при ~50 МБ
+
+# Проверить OOM events
+cat /sys/fs/cgroup/lab_test/memory.events
+# oom_kill должен быть > 0
+
+# Очистка
+sudo rmdir /sys/fs/cgroup/lab_test
+```
+
+### Практическая часть Б: namespaces — изоляция
+
+```bash
+# Создать новый PID namespace
+sudo unshare --pid --fork --mount-proc bash -c '
+    echo "Внутри нового PID namespace:"
+    echo "Мой PID: $$"
+    ps aux
+    echo "---"
+    echo "Всего процессов: $(ps aux | wc -l)"
+    echo "Снаружи их сотни, здесь — только bash и ps"
+'
+
+# Создать новый UTS namespace (hostname)
+sudo unshare --uts bash -c '
+    hostname container-lab
+    echo "Hostname внутри: $(hostname)"
+'
+echo "Hostname снаружи: $(hostname)"
+# Hostname хоста не изменился!
+
+# Создать новый NET namespace
+sudo unshare --net bash -c '
+    echo "Сетевые интерфейсы внутри:"
+    ip link show
+    echo "Только loopback!"
+'
+```
+
+**Вопросы к практике:**
+
+1. Почему внутри PID namespace `ps aux` показывает единицы процессов?
+2. Что произойдёт, если процесс внутри PID namespace завершит PID 1?
+3. Как cgroup limits + namespaces вместе создают «контейнер»?
+
+---
+
+## Файлы лаба
+
+| Файл | Назначение |
+|------|-----------|
+| `readme.md` | Это задание |
+| `lab_helper.sh` | Скрипт с меню (zombie farm, fd leak, CPU/IO-bound, diagnostic challenge) |
+| `solutions/worker.sh` | Решение задания 6 |
+| `solutions/diskmon.sh` | Скрипт мониторинга диска (задание 8) |
+| `solutions/diskmon.service` | Systemd unit-файл (задание 8) |
+| `answers.md` | Ответы на теоретические вопросы |

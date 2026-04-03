@@ -23,5 +23,19 @@ resources:
     cpu: 200m
     memory: 128Mi
 
+probes:
+  enabled: true
+  readiness:
+    path: /
+    initialDelaySeconds: 3
+    periodSeconds: 5
+  liveness:
+    path: /
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+securityContext:
+  allowPrivilegeEscalation: false
+
 config:
   logLevel: info

@@ -18,6 +18,28 @@ spec:
             - sh
             - -c
             - |
+              set -e
+              HOST="redis-0.redis-headless.lab.svc.cluster.local"
+              echo "Triggering BGSAVE on $HOST..."
+              redis-cli -h "$HOST" BGSAVE
+              # Подождать завершения BGSAVE (до 60 секунд)
+              BEFORE=$(redis-cli -h "$HOST" LASTSAVE)
+              for i in $(seq 1 60); do
+                AFTER=$(redis-cli -h "$HOST" LASTSAVE)
+                if [ "$AFTER" != "$BEFORE" ]; then
+                  echo "BGSAVE completed at $AFTER"
+                  break
+                fi
+                sleep 1
+              done
+              # Скопировать RDB-файл
               TS=$(date +%Y%m%d-%H%M%S)
-              redis-cli -h redis-0.redis-headless.lab.svc.cluster.local --rdb "/tmp/redis-${TS}.rdb"
+              redis-cli -h "$HOST" --rdb "/tmp/redis-${TS}.rdb"
               ls -lh /tmp/redis-*.rdb
+            resources:
+              requests:
+                cpu: 10m
+                memory: 32Mi
+              limits:
+                cpu: 100m
+                memory: 64Mi

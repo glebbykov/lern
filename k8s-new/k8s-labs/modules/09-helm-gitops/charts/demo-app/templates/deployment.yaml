@@ -26,5 +26,23 @@ spec:
         envFrom:
         - configMapRef:
             name: {{ .Release.Name }}-config
+        {{- if .Values.probes.enabled }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.probes.readiness.path }}
+            port: http
+          initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.probes.liveness.path }}
+            port: http
+          initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+        {{- end }}
         resources:
 {{ toYaml .Values.resources | indent 10 }}
+        {{- with .Values.securityContext }}
+        securityContext:
+{{ toYaml . | indent 10 }}
+        {{- end }}
