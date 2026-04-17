@@ -3,6 +3,11 @@
 Пошаговая инструкция по настройке репозитория, pipeline и деплоя в Azure App Service через Azure CLI.  
 Каждый шаг содержит команду, объяснение и ссылку на официальную документацию.
 
+> **Статус гайда:** все Azure-команды проверены в реальной подписке (West Europe). Lab 1 
+> развёрнут в двух независимых экземплярах (основном и `-v2`), каждый с нуля —
+> endpoint-ы `/` и `/health` отвечают корректно. Azure DevOps-часть (pipelines/repos/policies)
+> требует PAT и проверяется при прохождении студентом.
+
 ---
 
 ## Содержание
@@ -209,6 +214,27 @@ git push origin main
 
 ## 5. Создание Azure-ресурсов
 
+### 5.0 Регистрация Resource Providers (одноразово для подписки)
+
+Для новой подписки нужно зарегистрировать провайдер `Microsoft.Web`.  
+Обычно это делается автоматически при `az webapp create`, но на всякий случай:
+
+```bash
+az provider register --namespace Microsoft.Web
+
+# Проверить статус (ждём Registered)
+az provider show --namespace Microsoft.Web --query registrationState -o tsv
+```
+
+Если видите `NotRegistered` → подождите 1-2 минуты и повторите проверку.  
+Без регистрации создание App Service падает с `MissingSubscriptionRegistration`.
+
+**Документация:**
+- [az provider register](https://learn.microsoft.com/cli/azure/provider#az-provider-register)
+- [Resource providers and types](https://learn.microsoft.com/azure/azure-resource-manager/management/resource-providers-and-types)
+
+### 5.1 Создать ресурсы
+
 ```bash
 # Переменные — лучшая практика: определи один раз, используй везде
 LOCATION="westeurope"           # Регион датацентра
@@ -239,6 +265,14 @@ az webapp config set \
   --resource-group $RG \
   --startup-file "gunicorn --bind=0.0.0.0:8000 app:app"
 
+# 5. ВАЖНО: включить установку зависимостей при деплое.
+# Без этого setting `az webapp deploy --type zip` не запускает `pip install`,
+# и приложение падает с `ModuleNotFoundError: flask` (exit code 3).
+az webapp config appsettings set \
+  --name $APP_NAME \
+  --resource-group $RG \
+  --settings SCM_DO_BUILD_DURING_DEPLOYMENT=true
+
 # Проверить что приложение доступно (вернёт HTML страницу)
 az webapp show \
   --name $APP_NAME \
@@ -250,11 +284,22 @@ az webapp show \
 
 > **Лучшая практика:** Используй `--is-linux` для Python-приложений — Windows App Service для Python не рекомендуется.
 
+> **⚠ F1 квота CPU:** F1 тир даёт **60 CPU-минут в день на весь App Service Plan**.
+> При активной разработке с частыми деплоями квота может закончиться, и приложение
+> перейдёт в состояние `QuotaExceeded` (HTTP 403 "Site Disabled") до полуночи UTC.
+> Проверить: `az webapp show --name $APP_NAME --resource-group $RG --query state`.
+> Обойти можно апгрейдом: `az appservice plan update --sku B1 --name $APP_PLAN -g $RG` (≈10 EUR/мес).
+
 **Документация:**
 - [az group create](https://learn.microsoft.com/cli/azure/group#az-group-create)
 - [az appservice plan create](https://learn.microsoft.com/cli/azure/appservice/plan#az-appservice-plan-create)
 - [az webapp create](https://learn.microsoft.com/cli/azure/webapp#az-webapp-create)
+- [az webapp config set](https://learn.microsoft.com/cli/azure/webapp/config#az-webapp-config-set)
+- [az webapp config appsettings set](https://learn.microsoft.com/cli/azure/webapp/config/appsettings#az-webapp-config-appsettings-set)
+- [App Service Linux overview](https://learn.microsoft.com/azure/app-service/overview)
 - [App Service pricing](https://azure.microsoft.com/pricing/details/app-service/linux/)
+- [Python на App Service (Oryx build)](https://learn.microsoft.com/azure/app-service/configure-language-python)
+- [SCM_DO_BUILD_DURING_DEPLOYMENT](https://github.com/microsoft/Oryx/blob/main/doc/configuration.md#oryx-configuration)
 
 ---
 
@@ -309,8 +354,12 @@ az devops service-endpoint update \
 
 **Документация:**
 - [az ad sp create-for-rbac](https://learn.microsoft.com/cli/azure/ad/sp#az-ad-sp-create-for-rbac)
+- [Service Principal — концепция](https://learn.microsoft.com/entra/identity-platform/app-objects-and-service-principals)
 - [Service connections overview](https://learn.microsoft.com/azure/devops/pipelines/library/service-endpoints)
 - [az devops service-endpoint azurerm create](https://learn.microsoft.com/cli/azure/devops/service-endpoint/azurerm#az-devops-service-endpoint-azurerm-create)
+- [az role assignment create](https://learn.microsoft.com/cli/azure/role/assignment#az-role-assignment-create)
+- [Azure built-in roles (Contributor)](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles#contributor)
+- [Least privilege principle](https://learn.microsoft.com/azure/role-based-access-control/best-practices)
 
 ---
 
@@ -366,7 +415,11 @@ az pipelines agent list --pool-id <POOL_ID> --output table
 **Документация:**
 - [Self-hosted Linux agents](https://learn.microsoft.com/azure/devops/pipelines/agents/linux-agent)
 - [Agent pools](https://learn.microsoft.com/azure/devops/pipelines/agents/pools-queues)
+- [az pipelines pool create](https://learn.microsoft.com/cli/azure/pipelines/pool#az-pipelines-pool-create)
+- [Agent authentication options (PAT)](https://learn.microsoft.com/azure/devops/pipelines/agents/windows-agent#authenticate-with-a-personal-access-token-pat)
+- [PAT scopes reference](https://learn.microsoft.com/azure/devops/integrate/get-started/authentication/pats#scopes)
 - [Releases (GitHub)](https://github.com/microsoft/azure-pipelines-agent/releases)
+- [systemd service installation](https://learn.microsoft.com/azure/devops/pipelines/agents/linux-agent#run-as-a-systemd-service)
 
 ---
 
@@ -540,12 +593,19 @@ stages:
 **Документация:**
 - [YAML schema reference](https://learn.microsoft.com/azure/devops/pipelines/yaml-schema)
 - [Triggers](https://learn.microsoft.com/azure/devops/pipelines/build/triggers)
+- [PR triggers](https://learn.microsoft.com/azure/devops/pipelines/repos/azure-repos-git#pr-triggers)
 - [Stages](https://learn.microsoft.com/azure/devops/pipelines/process/stages)
+- [Jobs](https://learn.microsoft.com/azure/devops/pipelines/process/phases)
+- [Deployment jobs](https://learn.microsoft.com/azure/devops/pipelines/process/deployment-jobs)
 - [Environments](https://learn.microsoft.com/azure/devops/pipelines/process/environments)
-- [PublishTestResults@2](https://learn.microsoft.com/azure/devops/pipelines/tasks/test/publish-test-results)
-- [PublishCodeCoverageResults@2](https://learn.microsoft.com/azure/devops/pipelines/tasks/test/publish-code-coverage-results)
-- [ArchiveFiles@2](https://learn.microsoft.com/azure/devops/pipelines/tasks/utility/archive-files)
-- [AzureCLI@2](https://learn.microsoft.com/azure/devops/pipelines/tasks/deploy/azure-cli)
+- [Expressions & conditions](https://learn.microsoft.com/azure/devops/pipelines/process/expressions)
+- [Predefined variables](https://learn.microsoft.com/azure/devops/pipelines/build/variables)
+- [PublishTestResults@2](https://learn.microsoft.com/azure/devops/pipelines/tasks/reference/publish-test-results-v2)
+- [PublishCodeCoverageResults@2](https://learn.microsoft.com/azure/devops/pipelines/tasks/reference/publish-code-coverage-results-v2)
+- [ArchiveFiles@2](https://learn.microsoft.com/azure/devops/pipelines/tasks/reference/archive-files-v2)
+- [PublishBuildArtifacts@1](https://learn.microsoft.com/azure/devops/pipelines/tasks/reference/publish-build-artifacts-v1)
+- [AzureCLI@2](https://learn.microsoft.com/azure/devops/pipelines/tasks/reference/azure-cli-v2)
+- [az webapp deploy](https://learn.microsoft.com/cli/azure/webapp#az-webapp-deploy)
 
 ---
 
@@ -612,6 +672,9 @@ curl -s -X PATCH \
 
 **Документация:**
 - [Pipeline permissions REST API](https://learn.microsoft.com/rest/api/azure/devops/approvalsandchecks/pipeline-permissions)
+- [Resources in YAML pipelines](https://learn.microsoft.com/azure/devops/pipelines/process/resources)
+- [Checkpoint.Authorization checks](https://learn.microsoft.com/azure/devops/pipelines/process/approvals)
+- [base64 --help (Linux coreutils)](https://www.gnu.org/software/coreutils/manual/html_node/base64-invocation.html)
 
 ---
 
@@ -670,6 +733,9 @@ Pipelines → [текущий запуск] → "This pipeline needs permission 
 **Документация:**
 - [Environments](https://learn.microsoft.com/azure/devops/pipelines/process/environments)
 - [Approvals and checks](https://learn.microsoft.com/azure/devops/pipelines/process/approvals)
+- [az devops invoke](https://learn.microsoft.com/cli/azure/devops#az-devops-invoke)
+- [DistributedTask REST API (environments)](https://learn.microsoft.com/rest/api/azure/devops/distributedtask/environments)
+- [Environment permissions](https://learn.microsoft.com/azure/devops/pipelines/process/environments#security)
 
 ---
 
@@ -799,6 +865,62 @@ archiveFile: "$(Build.ArtifactStagingDirectory)/app-$(Build.BuildId).zip"
 
 **Решение:** В UI: Pipelines → [текущий запуск] → "This pipeline needs permission to access a resource" → **Permit**.  
 После первого разрешения повторного подтверждения не требуется.
+
+---
+
+### MissingSubscriptionRegistration при создании ресурсов
+
+**Проблема:** `ERROR: (MissingSubscriptionRegistration) The subscription is not registered to use namespace 'Microsoft.Web'`.
+
+**Причина:** Подписка впервые использует этот тип ресурса и провайдер ещё не зарегистрирован.
+
+**Решение:** См. шаг 5.0 — зарегистрировать `Microsoft.Web` через `az provider register`.
+Регистрация одноразовая на подписку, занимает 1-3 минуты.
+
+**Документация:** [Resource providers and types](https://learn.microsoft.com/azure/azure-resource-manager/management/resource-providers-and-types)
+
+---
+
+### Container exit code 3 / ModuleNotFoundError: flask после деплоя
+
+**Проблема:** После `az webapp deploy --type zip` приложение падает с
+`ModuleNotFoundError: No module named 'flask'`, container exit code 3.
+
+**Причина:** По умолчанию zip-deploy просто распаковывает архив, НЕ запуская `pip install`.
+Зависимости из `requirements.txt` не устанавливаются.
+
+**Решение:** Включить build во время деплоя (см. шаг 5.1):
+```bash
+az webapp config appsettings set \
+  --name $APP_NAME \
+  --resource-group $RG \
+  --settings SCM_DO_BUILD_DURING_DEPLOYMENT=true
+```
+
+**Документация:**
+- [Python build automation (Oryx)](https://learn.microsoft.com/azure/app-service/configure-language-python#customize-build-automation)
+- [SCM_DO_BUILD_DURING_DEPLOYMENT в Oryx](https://github.com/microsoft/Oryx/blob/main/doc/configuration.md)
+
+---
+
+### Приложение отвечает 403 "Site Disabled" / state = QuotaExceeded
+
+**Проблема:** Приложение работало, но вдруг стало отдавать HTTP 403 с сообщением
+"Site Disabled". `az webapp show` показывает `state: QuotaExceeded`.
+
+**Причина:** F1 тир даёт ровно **60 CPU-минут в день на весь App Service Plan**.
+Лимит считается по суммарной нагрузке всех приложений на одном плане.
+
+**Решение 1 (бесплатно):** Подождать полуночи UTC — квота сбрасывается.
+
+**Решение 2 (≈10 EUR/мес):** Апгрейд до Basic B1 (без ограничений CPU):
+```bash
+az appservice plan update --name $APP_PLAN --resource-group $RG --sku B1
+```
+
+**Документация:**
+- [App Service quotas](https://learn.microsoft.com/azure/app-service/overview-hosting-plans#how-much-does-my-app-service-plan-cost)
+- [App Service pricing tiers](https://azure.microsoft.com/pricing/details/app-service/linux/)
 
 ---
 
