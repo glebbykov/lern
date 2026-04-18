@@ -88,11 +88,11 @@ sudo ip netns exec red ping -c 1 127.0.0.1
 **Шаг 4.** Убедись в изоляции — namespace не видит интерфейсы хоста:
 
 ```bash
-# На хосте
-ip link show | grep -c ':'
+# На хосте (ты увидишь все свои интерфейсы: lo, eth0/enp3s0, docker0 и т.д.)
+ip -br link show
 
-# В namespace
-sudo ip netns exec red ip link show | grep -c ':'
+# В изолированном namespace (ты увидишь ТОЛЬКО loopback интерфейс lo)
+sudo ip netns exec red ip -br link show
 ```
 
 > **❓ Вопрос:** Namespace видит только `lo`. Это значит, что каждый namespace имеет полностью свой сетевой стек. Как думаешь, у каждого namespace свои iptables-правила тоже?
