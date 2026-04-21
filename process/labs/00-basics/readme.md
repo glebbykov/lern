@@ -345,7 +345,7 @@ sudo systemctl daemon-reload      # перечитать unit-файлы
 sudo systemctl start hello         # запустить
 sudo systemctl status hello        # проверить статус
 sleep 6
-journalctl -u hello -n 5 --no-pager   # логи сервиса
+sudo journalctl -u hello -n 5 --no-pager   # логи сервиса
 ```
 
 ### Теперь тест перезапуска
