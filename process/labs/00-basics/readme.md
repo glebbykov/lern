@@ -123,7 +123,7 @@ pstree -sp $$
 **Почитать:**
 - [ps(1) — man page](https://man7.org/linux/man-pages/man1/ps.1.html) — форматы `-f`, `-e`, `-o`
 - [pstree(1) — man page](https://man7.org/linux/man-pages/man1/pstree.1.html)
-- [The Ultimate Guide to ps, top, and htop](https://www.redhat.com/en/blog/ps-pstree-top-linux) *(на английском, очень доступно)*
+- [https://www.redhat.com/en/blog/ps-pstree-top-linux)](https://www.digitalocean.com/community/tutorials/linux-ps-command)
 
 ---
 
