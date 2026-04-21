@@ -90,9 +90,10 @@ az vm create --resource-group rg-lab-vm --name lab-vm \
 Когда процесс запускает другой — он делает `fork()` (создаёт копию себя) и потом `exec()` (заменяет код на новый бинарник). Поэтому у каждого процесса есть родитель.
 
 **Полезные ссылки:**
-- [Процесс на Linux — Arch Wiki](https://wiki.archlinux.org/title/Process_management)
-- [What every developer should know about the Linux process lifecycle](https://blog.thoughtram.io/linux/processes/)
+- [Process vs Program vs Thread: What Every Developer Should Know About OS Fundamentals](https://medium.com/@duhov/process-vs-program-vs-thread-what-every-developer-should-know-about-os-fundamentals-4a687a8a3cc9)
 - [proc(5) — man page про /proc](https://man7.org/linux/man-pages/man5/proc.5.html)
+- [Arch Wiki: Core utilities](https://wiki.archlinux.org/title/Core_utilities) (Тут описаны базовые утилиты: `ps`, `top`, `htop`, `kill`, `pgrep` и т.д.)
+- [Arch Wiki: Realtime process management](https://wiki.archlinux.org/title/Realtime_process_management) (Как приоритезировать потоки и управлять ресурсами CPU/памяти).
 
 ---
 
