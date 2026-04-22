@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    image: hardening-lab/stage2:latest
+    container_name: hardening-stage2
+    ports:
+      - "8083:8083"
+    secrets:
+      - app_secret
+
+secrets:
+  app_secret:
+    file: ./secret.txt

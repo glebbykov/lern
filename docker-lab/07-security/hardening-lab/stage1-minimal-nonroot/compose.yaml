@@ -1,0 +1,7 @@
+services:
+  app:
+    build: .
+    image: hardening-lab/stage1:latest
+    container_name: hardening-stage1
+    ports:
+      - "8083:8083"

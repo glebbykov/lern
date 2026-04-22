@@ -1,0 +1,31 @@
+# Этап 3 — «зажатый» рантайм.
+#   * read_only: true              — rootfs контейнера r/o.
+#   * tmpfs: /tmp                  — единственное место, куда можно писать.
+#   * cap_drop: [ALL]              — никаких Linux capabilities.
+#   * no-new-privileges:true       — setuid бинарник не сможет поднять права.
+#   * mem/cpu limits               — лимиты ресурсов.
+#   * pids_limit                   — защита от fork-бомб.
+services:
+  app:
+    build: .
+    image: hardening-lab/stage3:latest
+    container_name: hardening-stage3
+    ports:
+      - "8083:8083"
+    secrets:
+      - app_secret
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 100
+    mem_limit: 128m
+    cpus: "0.5"
+    restart: unless-stopped
+
+secrets:
+  app_secret:
+    file: ./secret.txt

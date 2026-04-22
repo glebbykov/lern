@@ -1,0 +1,9 @@
+# Этап 0: compose без каких-либо ограничений.
+# Никаких read_only, cap_drop, лимитов. Именно так делать НЕ надо.
+services:
+  app:
+    build: .
+    image: hardening-lab/stage0:latest
+    container_name: hardening-stage0
+    ports:
+      - "8083:8083"
