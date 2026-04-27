@@ -10,7 +10,7 @@
     src: https://github.com/VictoriaMetrics/VictoriaMetrics/releases/download/v1.97.1/victoria-metrics-linux-amd64-v1.97.1.tar.gz
     dest: /usr/local/bin/
     remote_src: yes
-  when: "'app_nodes' in group_names"
+  when: "'monitor_nodes' in group_names"
 
 - name: Настройка Systemd сервиса для VictoriaMetrics
   copy:
@@ -22,13 +22,13 @@
 
       [Service]
       User=prometheus
-      ExecStart=/usr/local/bin/victoria-metrics-prod -storageDataPath=/var/lib/victoria-metrics-data -retentionPeriod=1 -promscrape.config=/etc/prometheus/prometheus.yml
+      ExecStart=/usr/local/bin/victoria-metrics-prod -storageDataPath=/var/lib/victoria-metrics-data -retentionPeriod=1
       ExecReload=/bin/kill -HUP $MAINPID
       Restart=on-failure
 
       [Install]
       WantedBy=multi-user.target
-  when: "'app_nodes' in group_names"
+  when: "'monitor_nodes' in group_names"
 
 - name: Установка Grafana
   apt:
@@ -36,7 +36,7 @@
     state: present
     update_cache: yes
   ignore_errors: yes # Needs repo setup in real life, simplified here for demo
-  when: "'app_nodes' in group_names"
+  when: "'monitor_nodes' in group_names"
 
 - name: Установка Node Exporter на все машины
   unarchive:

@@ -7,18 +7,18 @@
 
 # --- DB NODE (Dedicated Physical Disks for I/O Isolation) ---
 - name: Создание Volume Groups для каждой БД на ВЫДЕЛЕННЫХ физических дисках
-  lvg:
+  community.general.lvg:
     vg: "{{ item.vg }}"
     pvs: "{{ item.pv }}"
   loop:
-    - { vg: 'vg_pgsql', pv: '/dev/sdc' }
-    - { vg: 'vg_mongo', pv: '/dev/sdd' }
-    - { vg: 'vg_redis', pv: '/dev/sde' }
-    - { vg: 'vg_etcd',  pv: '/dev/sdf' }
+    - { vg: 'vg_pgsql', pv: '/dev/sda' }
+    - { vg: 'vg_mongo', pv: '/dev/sdb' }
+    - { vg: 'vg_redis', pv: '/dev/sdc' }
+    - { vg: 'vg_etcd',  pv: '/dev/sdd' }
   when: "'db_nodes' in group_names"
 
 - name: Создание Logical Volumes для каждой БД
-  lvol:
+  community.general.lvol:
     vg: "{{ item.vg }}"
     lv: "{{ item.lv }}"
     size: "100%FREE"
@@ -55,13 +55,13 @@
 - name: Монтирование DB (ext4)
   mount:
     path: "/var/lib/{{ item.name }}"
-    src: "/dev/{{ item.vg }}/lv_{{ item.name }}"
+    src: "/dev/{{ item.vg }}/{{ item.lv }}"
     fstype: ext4
     state: mounted
   loop:
-    - { name: 'etcd', vg: 'vg_etcd' }
-    - { name: 'redis', vg: 'vg_redis' }
-    - { name: 'postgresql', vg: 'vg_pgsql' }
+    - { name: 'etcd', vg: 'vg_etcd', lv: 'lv_etcd' }
+    - { name: 'redis', vg: 'vg_redis', lv: 'lv_redis' }
+    - { name: 'postgresql', vg: 'vg_pgsql', lv: 'lv_pgsql' }
   when: "'db_nodes' in group_names"
 
 - name: Монтирование MongoDB (xfs)
@@ -72,36 +72,116 @@
     state: mounted
   when: "'db_nodes' in group_names"
 
-# --- APP NODE (Kafka / VictoriaMetrics Storage) ---
+# --- APP NODE (L7 Ingress / K8s Logs) ---
 - name: Создание VG vg_app на прикрепленном диске
-  lvg:
+  community.general.lvg:
     vg: vg_app
-    pvs: /dev/sdc
+    pvs: /dev/sda
   when: "'app_nodes' in group_names"
 
-- name: Создание LV для Kafka
-  lvol:
+- name: Создание LV для App
+  community.general.lvol:
     vg: vg_app
-    lv: lv_kafka
+    lv: lv_app
     size: 100%FREE
   when: "'app_nodes' in group_names"
+
+- name: Форматирование тома App в ext4
+  filesystem:
+    fstype: ext4
+    dev: /dev/vg_app/lv_app
+  when: "'app_nodes' in group_names"
+
+- name: Точка монтирования App Data
+  file:
+    path: /var/log/app_data
+    state: directory
+  when: "'app_nodes' in group_names"
+
+- name: Монтирование App Data
+  mount:
+    path: /var/log/app_data
+    src: /dev/vg_app/lv_app
+    fstype: ext4
+    state: mounted
+  when: "'app_nodes' in group_names"
+
+# --- KAFKA NODE (Message Broker with RAID 5) ---
+- name: Установка mdadm для RAID
+  apt:
+    name: mdadm
+    state: present
+  when: "'kafka_nodes' in group_names"
+
+- name: Создание RAID 5 массива из 3-х дисков
+  command: mdadm --create --verbose /dev/md0 --level=5 --raid-devices=3 /dev/sdb /dev/sdc /dev/sdd --run
+  args:
+    creates: /dev/md0
+  when: "'kafka_nodes' in group_names"
+
+- name: Создание VG vg_kafka на RAID массиве
+  community.general.lvg:
+    vg: vg_kafka
+    pvs: /dev/md0
+  when: "'kafka_nodes' in group_names"
+
+- name: Создание LV для Kafka
+  community.general.lvol:
+    vg: vg_kafka
+    lv: lv_kafka
+    size: 100%FREE
+  when: "'kafka_nodes' in group_names"
 
 - name: Форматирование тома Kafka в XFS
   filesystem:
     fstype: xfs
-    dev: /dev/vg_app/lv_kafka
-  when: "'app_nodes' in group_names"
+    dev: /dev/vg_kafka/lv_kafka
+  when: "'kafka_nodes' in group_names"
 
 - name: Точка монтирования Kafka
   file:
     path: /var/lib/kafka
     state: directory
-  when: "'app_nodes' in group_names"
+  when: "'kafka_nodes' in group_names"
 
 - name: Монтирование Kafka
   mount:
     path: /var/lib/kafka
-    src: /dev/vg_app/lv_kafka
+    src: /dev/vg_kafka/lv_kafka
     fstype: xfs
     state: mounted
-  when: "'app_nodes' in group_names"
+  when: "'kafka_nodes' in group_names"
+
+# --- MONITOR NODE (VictoriaMetrics Storage) ---
+- name: Создание VG vg_monitor на прикрепленном диске
+  community.general.lvg:
+    vg: vg_monitor
+    pvs: /dev/sdb
+  when: "'monitor_nodes' in group_names"
+
+- name: Создание LV для VictoriaMetrics
+  community.general.lvol:
+    vg: vg_monitor
+    lv: lv_monitor
+    size: 100%FREE
+  when: "'monitor_nodes' in group_names"
+
+- name: Форматирование тома Monitor в XFS
+  filesystem:
+    fstype: xfs
+    dev: /dev/vg_monitor/lv_monitor
+  when: "'monitor_nodes' in group_names"
+
+- name: Точка монтирования VictoriaMetrics
+  file:
+    path: /var/lib/victoria-metrics-data
+    state: directory
+  when: "'monitor_nodes' in group_names"
+
+- name: Монтирование VictoriaMetrics
+  mount:
+    path: /var/lib/victoria-metrics-data
+    src: /dev/vg_monitor/lv_monitor
+    fstype: xfs
+    state: mounted
+  when: "'monitor_nodes' in group_names"

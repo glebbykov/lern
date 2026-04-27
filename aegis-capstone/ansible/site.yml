@@ -1,12 +1,5 @@
 ---
-- name: Hardening Bastion Node
-  hosts: bastion
-  become: yes
-  tasks:
-    - name: Установка Fail2ban
-      apt: name=fail2ban state=present
-
-- name: Setup Application, Kafka & Observability Node
+- name: Setup Application Node (Ingress & Bastion)
   hosts: app_nodes
   become: yes
   roles:
@@ -16,7 +9,7 @@
     - 06-stateful-tier
     - 07-observability
 
-- name: Setup Database Node (Postgres, Mongo, Redis with I/O isolation)
+- name: Setup Database Node (I/O Isolated Storage)
   hosts: db_nodes
   become: yes
   roles:
@@ -24,3 +17,23 @@
     - 02-kernel
     - 03-security
     - 06-stateful-tier
+    - 07-observability
+
+- name: Setup Kafka Message Broker (RAID 5)
+  hosts: kafka_nodes
+  become: yes
+  roles:
+    - 01-storage
+    - 02-kernel
+    - 03-security
+    - 06-stateful-tier
+    - 07-observability
+
+- name: Setup Observability Central Server
+  hosts: monitor_nodes
+  become: yes
+  roles:
+    - 01-storage
+    - 02-kernel
+    - 03-security
+    - 07-observability

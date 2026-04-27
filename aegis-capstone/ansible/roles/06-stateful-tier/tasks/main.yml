@@ -89,17 +89,15 @@
   when: "'kafka_nodes' in group_names"
   notify: restart kafka
 
-- name: Запуск сервисов
-  systemd:
-    name: "{{ item }}"
-    state: started
-    enabled: yes
-    daemon_reload: yes
-  loop:
-    - nginx
-    - postgresql
-    - redis-server
-    - mongod
-    - kafka
-  # Ignore errors because some services only exist on specific nodes
-  ignore_errors: yes
+- name: Запуск Nginx (App Node)
+  systemd: name=nginx state=started enabled=yes
+  when: "'app_nodes' in group_names"
+
+- name: Запуск DBs (DB Node)
+  systemd: name="{{ item }}" state=started enabled=yes
+  loop: [postgresql, redis-server, mongod]
+  when: "'db_nodes' in group_names"
+
+- name: Запуск Kafka (Kafka Node)
+  systemd: name=kafka state=started enabled=yes daemon_reload=yes
+  when: "'kafka_nodes' in group_names"

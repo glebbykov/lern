@@ -11,7 +11,24 @@
       "Read(//c/main/lern/k8s-new/k8s-labs/modules/**)",
       "Bash(done)",
       "Bash(\"c:/main/lern/k8s-new/k8s-labs/modules/03-workloads/broken/scenario-01/README.md\":*)",
-      "Bash(grep \"name:\" c:/main/lern/k8s-new/k8s-labs/projects/project-c-broken-cluster-lab/solutions/*.yaml)"
+      "Bash(grep \"name:\" c:/main/lern/k8s-new/k8s-labs/projects/project-c-broken-cluster-lab/solutions/*.yaml)",
+      "Bash(gcloud config *)",
+      "Bash(gcloud auth *)",
+      "Bash(gcloud compute *)",
+      "Bash(chmod +x /root/lern/docker-lab/07-security/hardening-lab/stage*/run.sh /root/lern/docker-lab/07-security/hardening-lab/run-all.sh)",
+      "Bash(tar czf *)",
+      "Bash(chmod +x /root/lern/docker-lab/07-security/hardening-lab/stage4-breakin-checks/run.sh)",
+      "Bash(git push *)",
+      "Read(//root/.ssh/**)",
+      "Read(//root/**)",
+      "Bash(gh auth *)",
+      "Bash(ssh -T -o BatchMode=yes -o StrictHostKeyChecking=accept-new git@github.com)",
+      "Bash(git rebase *)",
+      "Bash(git stash *)",
+      "Bash(gcloud projects *)",
+      "Bash(gcloud services *)",
+      "Bash(chmod +x /root/lern/linux/process_isolation/00-setup/*.sh)",
+      "Bash(chmod +x *)"
     ]
   }
 }
