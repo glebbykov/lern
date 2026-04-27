@@ -30,17 +30,18 @@ az vm create -g $RG_NAME -n bastion-host --image Ubuntu2204 --size Standard_B1s 
   --vnet-name $VNET_NAME --subnet $SUBNET_DMZ --admin-username $ADMIN_USER --generate-ssh-keys \
   --public-ip-sku Standard --nsg "" --no-wait
 
-# 4.2. App Node (Nginx + Containerd. Future K8s Worker/CP)
+# 4.2. App Node (Nginx + Containerd)
 az vm create -g $RG_NAME -n app-node --image Ubuntu2204 --size Standard_B1s \
   --vnet-name $VNET_NAME --subnet $SUBNET_APP --admin-username $ADMIN_USER --ssh-key-values ~/.ssh/id_rsa.pub \
   --public-ip-address "" --nsg "" --no-wait
 
-# 4.3. DB Node (PostgreSQL + Redis + MongoDB). Увеличили диски до 20GB под зоопарк БД.
-az vm create -g $RG_NAME -n db-node --image Ubuntu2204 --size Standard_B2s \
+# 4.3. DB Node (PostgreSQL + Redis + MongoDB + etcd). 
+# Подключаем 4 ВЫДЕЛЕННЫХ физических диска для I/O изоляции каждой БД (Максимум для B2ms - 4 диска).
+az vm create -g $RG_NAME -n db-node --image Ubuntu2204 --size Standard_B2ms \
   --vnet-name $VNET_NAME --subnet $SUBNET_APP --admin-username $ADMIN_USER --ssh-key-values ~/.ssh/id_rsa.pub \
-  --public-ip-address "" --nsg "" --data-disk-sizes-gb 20 20 --no-wait
+  --public-ip-address "" --nsg "" --data-disk-sizes-gb 10 10 10 10 --no-wait
 
-# 4.4. Kafka Node (Apache Kafka KRaft). 3 диска под RAID 5.
+# 4.4. Kafka Node (Apache Kafka KRaft). 3 диска под аппаратный RAID 5.
 az vm create -g $RG_NAME -n kafka-node --image Ubuntu2204 --size Standard_B2s \
   --vnet-name $VNET_NAME --subnet $SUBNET_APP --admin-username $ADMIN_USER --ssh-key-values ~/.ssh/id_rsa.pub \
   --public-ip-address "" --nsg "" --data-disk-sizes-gb 10 10 10

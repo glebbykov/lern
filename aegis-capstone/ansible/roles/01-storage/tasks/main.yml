@@ -5,42 +5,44 @@
     state: present
     update_cache: yes
 
-# --- DB NODE (RAID 1) ---
-- name: Создание RAID 1 (etcd, pgsql, redis, mongodb) /dev/sdc, /dev/sdd на db-node
-  command: mdadm --create --verbose /dev/md0 --level=1 --raid-devices=2 /dev/sdc /dev/sdd
-  args:
-    creates: /dev/md0
-  when: "'db_nodes' in group_names"
-
-- name: Создание VG vg_db на RAID 1
+# --- DB NODE (Dedicated Physical Disks for I/O Isolation) ---
+- name: Создание Volume Groups для каждой БД на ВЫДЕЛЕННЫХ физических дисках
   lvg:
-    vg: vg_db
-    pvs: /dev/md0
-  when: "'db_nodes' in group_names"
-
-- name: Создание Logical Volumes для DB
-  lvol:
-    vg: vg_db
-    lv: "{{ item.lv }}"
-    size: "{{ item.size }}"
+    vg: "{{ item.vg }}"
+    pvs: "{{ item.pv }}"
   loop:
-    - { lv: 'lv_etcd', size: '2G' }
-    - { lv: 'lv_redis', size: '2G' }
-    - { lv: 'lv_mongo', size: '5G' }
-    - { lv: 'lv_pgsql', size: '100%FREE' }
+    - { vg: 'vg_pgsql', pv: '/dev/sdc' }
+    - { vg: 'vg_mongo', pv: '/dev/sdd' }
+    - { vg: 'vg_redis', pv: '/dev/sde' }
+    - { vg: 'vg_etcd',  pv: '/dev/sdf' }
   when: "'db_nodes' in group_names"
 
-- name: Форматирование томов DB в ext4
+- name: Создание Logical Volumes для каждой БД
+  lvol:
+    vg: "{{ item.vg }}"
+    lv: "{{ item.lv }}"
+    size: "100%FREE"
+  loop:
+    - { vg: 'vg_pgsql', lv: 'lv_pgsql' }
+    - { vg: 'vg_mongo', lv: 'lv_mongo' }
+    - { vg: 'vg_redis', lv: 'lv_redis' }
+    - { vg: 'vg_etcd',  lv: 'lv_etcd' }
+  when: "'db_nodes' in group_names"
+
+- name: Форматирование томов в ext4
   filesystem:
     fstype: ext4
-    dev: "/dev/vg_db/{{ item }}"
-  loop: [lv_etcd, lv_redis, lv_pgsql]
+    dev: "/dev/{{ item.vg }}/{{ item.lv }}"
+  loop:
+    - { vg: 'vg_pgsql', lv: 'lv_pgsql' }
+    - { vg: 'vg_redis', lv: 'lv_redis' }
+    - { vg: 'vg_etcd',  lv: 'lv_etcd' }
   when: "'db_nodes' in group_names"
 
 - name: Форматирование тома MongoDB в XFS (Best practice for WiredTiger)
   filesystem:
     fstype: xfs
-    dev: "/dev/vg_db/lv_mongo"
+    dev: "/dev/vg_mongo/lv_mongo"
   when: "'db_nodes' in group_names"
 
 - name: Точки монтирования DB
@@ -53,19 +55,19 @@
 - name: Монтирование DB (ext4)
   mount:
     path: "/var/lib/{{ item.name }}"
-    src: "/dev/vg_db/lv_{{ item.name }}"
+    src: "/dev/{{ item.vg }}/lv_{{ item.name }}"
     fstype: ext4
     state: mounted
   loop:
-    - { name: 'etcd' }
-    - { name: 'redis' }
-    - { name: 'postgresql' }
+    - { name: 'etcd', vg: 'vg_etcd' }
+    - { name: 'redis', vg: 'vg_redis' }
+    - { name: 'postgresql', vg: 'vg_pgsql' }
   when: "'db_nodes' in group_names"
 
 - name: Монтирование MongoDB (xfs)
   mount:
     path: "/var/lib/mongodb"
-    src: "/dev/vg_db/lv_mongo"
+    src: "/dev/vg_mongo/lv_mongo"
     fstype: xfs
     state: mounted
   when: "'db_nodes' in group_names"
@@ -76,6 +78,19 @@
   command: mdadm --create --verbose /dev/md1 --level=5 --raid-devices=3 /dev/sdc /dev/sdd /dev/sde
   args:
     creates: /dev/md1
+  when: "'kafka_nodes' in group_names"
+
+- name: Сохранение конфигурации RAID
+  shell: mdadm --detail --scan >> /etc/mdadm/mdadm.conf
+  args:
+    creates: /etc/mdadm/mdadm.conf.saved
+  notify: update initramfs
+  when: "'kafka_nodes' in group_names"
+
+- name: Маркер сохранения config
+  file:
+    path: /etc/mdadm/mdadm.conf.saved
+    state: touch
   when: "'kafka_nodes' in group_names"
 
 - name: Создание VG vg_kafka на RAID 5
@@ -110,16 +125,3 @@
     fstype: xfs
     state: mounted
   when: "'kafka_nodes' in group_names"
-
-
-# --- ОБЩИЕ ШАГИ ---
-- name: Сохранение конфигурации RAID
-  shell: mdadm --detail --scan >> /etc/mdadm/mdadm.conf
-  args:
-    creates: /etc/mdadm/mdadm.conf.saved
-  notify: update initramfs
-
-- name: Маркер сохранения config
-  file:
-    path: /etc/mdadm/mdadm.conf.saved
-    state: touch
