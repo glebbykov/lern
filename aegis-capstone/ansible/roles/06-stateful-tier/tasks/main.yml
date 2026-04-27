@@ -1,21 +1,82 @@
 ---
-- name: Установка компонентов Stateful Tier (Load Balancer, DBs, Brokers, Cache)
+- name: Установка Nginx (App/LB Node)
+  apt: name=nginx state=present update_cache=yes
+  when: "'app_nodes' in group_names"
+
+- name: Установка PostgreSQL и Redis (DB Node)
   apt:
-    name:
-      - haproxy
-      - postgresql
-      - redis-server
-      - rabbitmq-server
+    name: [postgresql, redis-server]
     state: present
     update_cache: yes
+  when: "'db_nodes' in group_names"
 
-- name: Убеждаемся, что сервисы БД включены и запущены
+# --- KAFKA KRAFT INSTALLATION ---
+- name: Установка Java для Kafka
+  apt: name=default-jre state=present update_cache=yes
+  when: "'kafka_nodes' in group_names"
+
+- name: Скачивание и распаковка Apache Kafka
+  unarchive:
+    src: https://archive.apache.org/dist/kafka/3.7.0/kafka_2.13-3.7.0.tgz
+    dest: /opt/
+    remote_src: yes
+  when: "'kafka_nodes' in group_names"
+
+- name: Создание симлинка для Kafka
+  file:
+    src: /opt/kafka_2.13-3.7.0
+    dest: /opt/kafka
+    state: link
+  when: "'kafka_nodes' in group_names"
+
+- name: Изменение директории логов в server.properties (KRaft)
+  lineinfile:
+    path: /opt/kafka/config/kraft/server.properties
+    regexp: '^log.dirs='
+    line: 'log.dirs=/var/lib/kafka'
+  when: "'kafka_nodes' in group_names"
+
+- name: Форматирование хранилища KRaft (только один раз)
+  shell: |
+    UUID=$(/opt/kafka/bin/kafka-storage.sh random-uuid)
+    /opt/kafka/bin/kafka-storage.sh format -t $UUID -c /opt/kafka/config/kraft/server.properties
+    touch /var/lib/kafka/.kraft_formatted
+  args:
+    creates: /var/lib/kafka/.kraft_formatted
+  when: "'kafka_nodes' in group_names"
+
+- name: Настройка Systemd сервиса для Kafka KRaft
+  copy:
+    dest: /etc/systemd/system/kafka.service
+    content: |
+      [Unit]
+      Description=Apache Kafka Server (KRaft mode)
+      Documentation=http://kafka.apache.org/documentation.html
+      Requires=network.target
+      After=network.target
+
+      [Service]
+      Type=simple
+      Environment="JAVA_HOME=/usr/lib/jvm/default-java"
+      ExecStart=/opt/kafka/bin/kafka-server-start.sh /opt/kafka/config/kraft/server.properties
+      ExecStop=/opt/kafka/bin/kafka-server-stop.sh
+      Restart=on-abnormal
+
+      [Install]
+      WantedBy=multi-user.target
+  when: "'kafka_nodes' in group_names"
+  notify: restart kafka
+
+- name: Запуск сервисов
   systemd:
     name: "{{ item }}"
     state: started
     enabled: yes
+    daemon_reload: yes
   loop:
-    - haproxy
+    - nginx
     - postgresql
     - redis-server
-    - rabbitmq-server
+    - kafka
+  # Ignore errors because some services only exist on specific nodes
+  ignore_errors: yes

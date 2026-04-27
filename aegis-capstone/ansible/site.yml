@@ -3,18 +3,33 @@
   hosts: bastion
   become: yes
   tasks:
-    - name: Ensure minimal baseline and Fail2ban
-      apt:
-        name: fail2ban
-        state: present
+    - name: Установка Fail2ban
+      apt: name=fail2ban state=present
 
-- name: Setup Application Node (Storage, Kernel, Security, Runtime)
+- name: Setup Application & Ingress Node
   hosts: app_nodes
   become: yes
   roles:
-    # Заглушки для будущих ролей. Они будут написаны на этапе реализации.
-    - 01-storage
     - 02-kernel
     - 03-security
     - 04-runtime
     - 05-app-sandbox
+    - 06-stateful-tier
+
+- name: Setup Database Node (RAID 1)
+  hosts: db_nodes
+  become: yes
+  roles:
+    - 01-storage
+    - 02-kernel
+    - 03-security
+    - 06-stateful-tier
+
+- name: Setup Kafka Message Broker Node (RAID 5)
+  hosts: kafka_nodes
+  become: yes
+  roles:
+    - 01-storage
+    - 02-kernel
+    - 03-security
+    - 06-stateful-tier

@@ -1,32 +1,14 @@
 ---
-- name: Отключение Swap в рантайме
+- name: Отключение Swap
   command: swapoff -a
-  when: ansible_swaptotal_mb > 0
 
-- name: Удаление Swap из /etc/fstab
-  replace:
-    path: /etc/fstab
-    regexp: '^([^#].*?\sswap\s+sw\s+.*)$'
-    replace: '# \1'
-
-- name: Загрузка современных модулей ядра (overlay, br_netfilter, tcp_bbr)
+- name: Загрузка модулей ядра
   modprobe:
     name: "{{ item }}"
     state: present
-  loop:
-    - overlay
-    - br_netfilter
-    - tcp_bbr
+  loop: [overlay, br_netfilter, tcp_bbr]
 
-- name: Сохранение загрузки модулей после ребута
-  copy:
-    dest: /etc/modules-load.d/k8s.conf
-    content: |
-      overlay
-      br_netfilter
-      tcp_bbr
-
-- name: Создание Systemd Unit для отключения Transparent Huge Pages (THP) - requirement for Redis
+- name: Создание Systemd Unit для отключения Transparent Huge Pages (THP) - requirement for DBs
   copy:
     dest: /etc/systemd/system/disable-thp.service
     content: |
@@ -34,7 +16,6 @@
       Description=Disable Transparent Huge Pages (THP)
       DefaultDependencies=no
       After=sysinit.target local-fs.target
-      Before=redis-server.service
 
       [Service]
       Type=oneshot
@@ -42,15 +23,16 @@
 
       [Install]
       WantedBy=basic.target
-  notify: reload systemd
+  when: "'stateful' in group_names"
 
 - name: Включение сервиса отключения THP
   systemd:
     name: disable-thp.service
     enabled: yes
     state: started
+  when: "'stateful' in group_names"
 
-- name: Тюнинг параметров ядра (Stateful Tier & K8s Networking)
+- name: Общий Тюнинг сети и BBR
   sysctl:
     name: "{{ item.key }}"
     value: "{{ item.value }}"
@@ -58,21 +40,35 @@
     state: present
     reload: yes
   loop:
-    # Оптимизация PostgreSQL (I/O Flush tuning)
-    - { key: 'vm.dirty_background_ratio', value: '5' }
-    - { key: 'vm.dirty_ratio', value: '15' }
-    # Оптимизация Redis (Overcommit)
-    - { key: 'vm.overcommit_memory', value: '1' }
-    # Маршрутизация для K8s
-    - { key: 'net.ipv4.ip_forward', value: '1' }
-    - { key: 'net.bridge.bridge-nf-call-iptables', value: '1' }
-    # Оптимизация TCP (HAProxy / Web)
     - { key: 'net.core.default_qdisc', value: 'fq' }
     - { key: 'net.ipv4.tcp_congestion_control', value: 'bbr' }
     - { key: 'net.core.somaxconn', value: '65535' }
     - { key: 'net.ipv4.ip_local_port_range', value: '1024 65535' }
-    # Файловые дескрипторы (RabbitMQ & HAProxy & K8s)
     - { key: 'fs.file-max', value: '2000000' }
-    - { key: 'fs.inotify.max_user_watches', value: '524288' }
-    # Управление памятью
     - { key: 'vm.swappiness', value: '0' }
+
+- name: Тюнинг для PostgreSQL и Redis
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/99-db-tuning.conf
+    state: present
+    reload: yes
+  loop:
+    - { key: 'vm.dirty_background_ratio', value: '5' }
+    - { key: 'vm.dirty_ratio', value: '15' }
+    - { key: 'vm.overcommit_memory', value: '1' }
+  when: "'db_nodes' in group_names"
+
+- name: Тюнинг для Kafka (Page Cache Optimization)
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/99-kafka-tuning.conf
+    state: present
+    reload: yes
+  loop:
+    - { key: 'vm.dirty_background_ratio', value: '5' }
+    - { key: 'vm.dirty_ratio', value: '60' }
+    - { key: 'vm.max_map_count', value: '262144' }
+  when: "'kafka_nodes' in group_names"
