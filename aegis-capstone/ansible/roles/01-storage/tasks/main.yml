@@ -6,7 +6,7 @@
     update_cache: yes
 
 # --- DB NODE (RAID 1) ---
-- name: Создание RAID 1 (etcd, pgsql, redis) /dev/sdc, /dev/sdd на db-node
+- name: Создание RAID 1 (etcd, pgsql, redis, mongodb) /dev/sdc, /dev/sdd на db-node
   command: mdadm --create --verbose /dev/md0 --level=1 --raid-devices=2 /dev/sdc /dev/sdd
   args:
     creates: /dev/md0
@@ -26,6 +26,7 @@
   loop:
     - { lv: 'lv_etcd', size: '2G' }
     - { lv: 'lv_redis', size: '2G' }
+    - { lv: 'lv_mongo', size: '5G' }
     - { lv: 'lv_pgsql', size: '100%FREE' }
   when: "'db_nodes' in group_names"
 
@@ -36,7 +37,20 @@
   loop: [lv_etcd, lv_redis, lv_pgsql]
   when: "'db_nodes' in group_names"
 
-- name: Точки монтирования и монтирование DB
+- name: Форматирование тома MongoDB в XFS (Best practice for WiredTiger)
+  filesystem:
+    fstype: xfs
+    dev: "/dev/vg_db/lv_mongo"
+  when: "'db_nodes' in group_names"
+
+- name: Точки монтирования DB
+  file:
+    path: "/var/lib/{{ item }}"
+    state: directory
+  loop: [etcd, redis, postgresql, mongodb]
+  when: "'db_nodes' in group_names"
+
+- name: Монтирование DB (ext4)
   mount:
     path: "/var/lib/{{ item.name }}"
     src: "/dev/vg_db/lv_{{ item.name }}"
@@ -47,6 +61,15 @@
     - { name: 'redis' }
     - { name: 'postgresql' }
   when: "'db_nodes' in group_names"
+
+- name: Монтирование MongoDB (xfs)
+  mount:
+    path: "/var/lib/mongodb"
+    src: "/dev/vg_db/lv_mongo"
+    fstype: xfs
+    state: mounted
+  when: "'db_nodes' in group_names"
+
 
 # --- KAFKA NODE (RAID 5) ---
 - name: Создание RAID 5 (kafka) /dev/sdc, /dev/sdd, /dev/sde на kafka-node
@@ -74,6 +97,12 @@
     dev: /dev/vg_kafka/lv_kafka
   when: "'kafka_nodes' in group_names"
 
+- name: Создание точки монтирования Kafka
+  file:
+    path: /var/lib/kafka
+    state: directory
+  when: "'kafka_nodes' in group_names"
+
 - name: Монтирование Kafka
   mount:
     path: /var/lib/kafka
@@ -81,6 +110,7 @@
     fstype: xfs
     state: mounted
   when: "'kafka_nodes' in group_names"
+
 
 # --- ОБЩИЕ ШАГИ ---
 - name: Сохранение конфигурации RAID

@@ -30,15 +30,15 @@ az vm create -g $RG_NAME -n bastion-host --image Ubuntu2204 --size Standard_B1s 
   --vnet-name $VNET_NAME --subnet $SUBNET_DMZ --admin-username $ADMIN_USER --generate-ssh-keys \
   --public-ip-sku Standard --nsg "" --no-wait
 
-# 4.2. App Node (Nginx + Apps)
+# 4.2. App Node (Nginx + Containerd. Future K8s Worker/CP)
 az vm create -g $RG_NAME -n app-node --image Ubuntu2204 --size Standard_B1s \
   --vnet-name $VNET_NAME --subnet $SUBNET_APP --admin-username $ADMIN_USER --ssh-key-values ~/.ssh/id_rsa.pub \
   --public-ip-address "" --nsg "" --no-wait
 
-# 4.3. DB Node (PostgreSQL + Redis). 2 диска под RAID 1.
+# 4.3. DB Node (PostgreSQL + Redis + MongoDB). Увеличили диски до 20GB под зоопарк БД.
 az vm create -g $RG_NAME -n db-node --image Ubuntu2204 --size Standard_B2s \
   --vnet-name $VNET_NAME --subnet $SUBNET_APP --admin-username $ADMIN_USER --ssh-key-values ~/.ssh/id_rsa.pub \
-  --public-ip-address "" --nsg "" --data-disk-sizes-gb 10 10 --no-wait
+  --public-ip-address "" --nsg "" --data-disk-sizes-gb 20 20 --no-wait
 
 # 4.4. Kafka Node (Apache Kafka KRaft). 3 диска под RAID 5.
 az vm create -g $RG_NAME -n kafka-node --image Ubuntu2204 --size Standard_B2s \

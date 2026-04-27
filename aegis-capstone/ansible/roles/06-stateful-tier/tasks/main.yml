@@ -3,12 +3,34 @@
   apt: name=nginx state=present update_cache=yes
   when: "'app_nodes' in group_names"
 
-- name: Установка PostgreSQL и Redis (DB Node)
+# --- DB NODE (PostgreSQL, Redis, MongoDB) ---
+- name: Установка базовых БД (PostgreSQL, Redis)
   apt:
     name: [postgresql, redis-server]
     state: present
     update_cache: yes
   when: "'db_nodes' in group_names"
+
+- name: Добавление GPG ключа MongoDB
+  get_url:
+    url: https://www.mongodb.org/static/pgp/server-7.0.asc
+    dest: /etc/apt/trusted.gpg.d/mongodb-server-7.0.asc
+  when: "'db_nodes' in group_names"
+
+- name: Добавление репозитория MongoDB 7.0
+  apt_repository:
+    repo: "deb [ arch=amd64,arm64 signed-by=/etc/apt/trusted.gpg.d/mongodb-server-7.0.asc ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse"
+    state: present
+    filename: mongodb-org-7.0
+  when: "'db_nodes' in group_names"
+
+- name: Установка MongoDB
+  apt:
+    name: mongodb-org
+    state: present
+    update_cache: yes
+  when: "'db_nodes' in group_names"
+
 
 # --- KAFKA KRAFT INSTALLATION ---
 - name: Установка Java для Kafka
@@ -77,6 +99,7 @@
     - nginx
     - postgresql
     - redis-server
+    - mongod
     - kafka
   # Ignore errors because some services only exist on specific nodes
   ignore_errors: yes
