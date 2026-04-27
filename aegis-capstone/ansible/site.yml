@@ -1,0 +1,20 @@
+---
+- name: Hardening Bastion Node
+  hosts: bastion
+  become: yes
+  tasks:
+    - name: Ensure minimal baseline and Fail2ban
+      apt:
+        name: fail2ban
+        state: present
+
+- name: Setup Application Node (Storage, Kernel, Security, Runtime)
+  hosts: app_nodes
+  become: yes
+  roles:
+    # Заглушки для будущих ролей. Они будут написаны на этапе реализации.
+    # - 01-storage
+    # - 02-kernel
+    # - 03-security
+    # - 04-runtime
+    # - 05-app-sandbox
