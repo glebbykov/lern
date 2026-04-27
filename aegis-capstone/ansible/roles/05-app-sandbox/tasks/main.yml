@@ -1,0 +1,63 @@
+---
+- name: Создание системного пользователя aegis-svc
+  user:
+    name: aegis-svc
+    system: yes
+    shell: /usr/sbin/nologin
+    create_home: no
+
+- name: Создание директории для приложения
+  file:
+    path: /opt/aegis-app
+    state: directory
+    owner: aegis-svc
+    group: aegis-svc
+
+- name: Деплой кода приложения
+  copy:
+    dest: /opt/aegis-app/app.py
+    content: |
+      import http.server
+      import socketserver
+      PORT = 8080
+      Handler = http.server.SimpleHTTPRequestHandler
+      with socketserver.TCPServer(("", PORT), Handler) as httpd:
+          print("Aegis Secure App serving at port", PORT)
+          httpd.serve_forever()
+    owner: aegis-svc
+    group: aegis-svc
+
+- name: Создание systemd сервиса с Харденингом (Песочница)
+  copy:
+    dest: /etc/systemd/system/aegis-app.service
+    content: |
+      [Unit]
+      Description=Aegis Sandbox App
+      After=network.target
+
+      [Service]
+      ExecStart=/usr/bin/python3 /opt/aegis-app/app.py
+      WorkingDirectory=/opt/aegis-app
+      User=aegis-svc
+      Group=aegis-svc
+
+      # Sandboxing
+      NoNewPrivileges=yes
+      ProtectSystem=strict
+      ProtectHome=yes
+      PrivateTmp=yes
+      SystemCallFilter=~@mount @clock @raw-io
+      ReadOnlyPaths=/
+
+      Restart=on-failure
+
+      [Install]
+      WantedBy=multi-user.target
+  notify: restart aegis-app
+
+- name: Запуск и включение aegis-app сервиса
+  systemd:
+    name: aegis-app
+    state: started
+    enabled: yes
+    daemon_reload: yes

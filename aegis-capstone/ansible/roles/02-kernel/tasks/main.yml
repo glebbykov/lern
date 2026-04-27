@@ -1,0 +1,39 @@
+---
+- name: Отключение Swap в рантайме (требование Kubernetes)
+  command: swapoff -a
+  when: ansible_swaptotal_mb > 0
+
+- name: Удаление Swap из /etc/fstab (чтобы не включился после ребута)
+  replace:
+    path: /etc/fstab
+    regexp: '^([^#].*?\sswap\s+sw\s+.*)$'
+    replace: '# \1'
+
+- name: Загрузка модулей ядра (overlay, br_netfilter)
+  modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+
+- name: Сохранение загрузки модулей после ребута
+  copy:
+    dest: /etc/modules-load.d/k8s.conf
+    content: |
+      overlay
+      br_netfilter
+
+- name: Тюнинг параметров ядра (sysctl)
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/99-aegis-prod.conf
+    state: present
+    reload: yes
+  loop:
+    - { key: 'net.ipv4.ip_forward', value: '1' }
+    - { key: 'fs.file-max', value: '2000000' }
+    - { key: 'fs.inotify.max_user_watches', value: '524288' }
+    - { key: 'net.core.somaxconn', value: '65535' }
+    - { key: 'net.ipv4.tcp_tw_reuse', value: '1' }

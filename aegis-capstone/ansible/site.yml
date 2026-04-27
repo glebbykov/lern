@@ -13,8 +13,8 @@
   become: yes
   roles:
     # Заглушки для будущих ролей. Они будут написаны на этапе реализации.
-    # - 01-storage
-    # - 02-kernel
-    # - 03-security
-    # - 04-runtime
-    # - 05-app-sandbox
+    - 01-storage
+    - 02-kernel
+    - 03-security
+    - 04-runtime
+    - 05-app-sandbox

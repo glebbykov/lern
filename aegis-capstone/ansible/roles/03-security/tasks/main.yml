@@ -1,0 +1,38 @@
+---
+- name: Установка UFW и Auditd
+  apt:
+    name:
+      - ufw
+      - auditd
+    state: present
+
+- name: Разрешение входящего SSH в UFW
+  ufw:
+    rule: allow
+    port: '22'
+    proto: tcp
+
+- name: Включение UFW (Default Deny)
+  ufw:
+    state: enabled
+    policy: deny
+
+- name: Харденинг SSHD (Запрет root и паролей)
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    state: present
+  loop:
+    - { regexp: '^#?PermitRootLogin', line: 'PermitRootLogin no' }
+    - { regexp: '^#?PasswordAuthentication', line: 'PasswordAuthentication no' }
+  notify: restart sshd
+
+- name: Настройка правил аудита (Auditd)
+  copy:
+    dest: /etc/audit/rules.d/aegis.rules
+    content: |
+      -w /etc/shadow -p wa -k shadow_changes
+      -w /etc/sudoers -p wa -k sudoers_changes
+      -w /var/log/ -p wa -k log_changes
+  notify: restart auditd

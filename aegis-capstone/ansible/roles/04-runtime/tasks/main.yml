@@ -1,0 +1,32 @@
+---
+- name: Добавление ключа Docker/Containerd
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+
+- name: Добавление репозитория Docker/Containerd
+  apt_repository:
+    repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+    state: present
+
+- name: Установка containerd
+  apt:
+    name: containerd.io
+    state: present
+
+- name: Генерация дефолтного конфига containerd
+  command: containerd config default
+  register: containerd_config
+  changed_when: false
+
+- name: Сохранение конфига containerd
+  copy:
+    dest: /etc/containerd/config.toml
+    content: "{{ containerd_config.stdout }}"
+
+- name: Включение SystemdCgroup в конфиге containerd
+  replace:
+    path: /etc/containerd/config.toml
+    regexp: 'SystemdCgroup = false'
+    replace: 'SystemdCgroup = true'
+  notify: restart containerd

@@ -1,0 +1,59 @@
+---
+- name: Установка пакетов lvm2 и xfsprogs
+  apt:
+    name:
+      - lvm2
+      - xfsprogs
+    state: present
+    update_cache: yes
+
+- name: Создание Volume Group (vg_aegis_data) из двух присоединенных дисков
+  lvg:
+    vg: vg_aegis_data
+    # В Azure пустые data-диски обычно монтируются как /dev/sdc и /dev/sdd
+    pvs: /dev/sdc,/dev/sdd
+
+- name: Создание Logical Volumes (etcd, pgsql, containerd)
+  lvol:
+    vg: vg_aegis_data
+    lv: "{{ item.name }}"
+    size: "{{ item.size }}"
+  loop:
+    - { name: 'lv_etcd', size: '5G' }
+    - { name: 'lv_pgsql', size: '15G' }
+    - { name: 'lv_containerd', size: '15G' }
+
+- name: Форматирование lv_etcd и lv_pgsql в ext4
+  filesystem:
+    fstype: ext4
+    dev: "/dev/vg_aegis_data/{{ item }}"
+  loop:
+    - lv_etcd
+    - lv_pgsql
+
+- name: Форматирование lv_containerd в xfs
+  filesystem:
+    fstype: xfs
+    dev: /dev/vg_aegis_data/lv_containerd
+
+- name: Монтирование etcd
+  mount:
+    path: /var/lib/etcd
+    src: /dev/vg_aegis_data/lv_etcd
+    fstype: ext4
+    state: mounted
+
+- name: Монтирование postgresql
+  mount:
+    path: /var/lib/postgresql
+    src: /dev/vg_aegis_data/lv_pgsql
+    fstype: ext4
+    state: mounted
+
+- name: Монтирование containerd с поддержкой pquota (Project Quotas)
+  mount:
+    path: /var/lib/containerd
+    src: /dev/vg_aegis_data/lv_containerd
+    fstype: xfs
+    opts: defaults,pquota
+    state: mounted
