@@ -30,7 +30,7 @@ assert "AppArmor загружен в ядре" \
 log "утилиты"
 require_tools=(
   unshare nsenter ip setcap getcap capsh apparmor_parser systemd-nspawn
-  debootstrap stress-ng busybox curl tar python3 strace
+  debootstrap stress-ng busybox curl tar python3 strace bpftrace jq newuidmap runc
 )
 for t in "${require_tools[@]}"; do
   assert "найден: $t" command -v "$t"
