@@ -30,12 +30,38 @@
       WantedBy=multi-user.target
   when: "'monitor_nodes' in group_names"
 
+- name: Зависимости apt для Grafana repo
+  apt:
+    name: [apt-transport-https, gnupg, software-properties-common]
+    state: present
+  when: "'monitor_nodes' in group_names"
+
+- name: GPG ключ Grafana
+  get_url:
+    url: https://apt.grafana.com/gpg.key
+    dest: /etc/apt/trusted.gpg.d/grafana.asc
+    mode: '0644'
+  when: "'monitor_nodes' in group_names"
+
+- name: Apt репозиторий Grafana (stable)
+  apt_repository:
+    repo: "deb [signed-by=/etc/apt/trusted.gpg.d/grafana.asc] https://apt.grafana.com stable main"
+    state: present
+    filename: grafana
+  when: "'monitor_nodes' in group_names"
+
 - name: Установка Grafana
   apt:
     name: grafana
     state: present
     update_cache: yes
-  ignore_errors: yes # Needs repo setup in real life, simplified here for demo
+  when: "'monitor_nodes' in group_names"
+
+- name: Запуск Grafana
+  systemd:
+    name: grafana-server
+    state: started
+    enabled: yes
   when: "'monitor_nodes' in group_names"
 
 - name: Установка Node Exporter на все машины

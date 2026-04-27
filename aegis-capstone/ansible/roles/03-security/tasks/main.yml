@@ -12,6 +12,50 @@
     port: '22'
     proto: tcp
 
+- name: HTTP/HTTPS ingress на app-node
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop: ['80', '443']
+  when: "'app_nodes' in group_names"
+
+- name: East-west порты БД (Postgres / MongoDB / Redis / etcd)
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop: ['5432', '27017', '6379', '2379', '2380']
+  when: "'db_nodes' in group_names"
+
+- name: Kafka broker / controller
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop: ['9092', '9093']
+  when: "'kafka_nodes' in group_names"
+
+- name: VictoriaMetrics + Grafana UI
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop: ['8428', '3000']
+  when: "'monitor_nodes' in group_names"
+
+- name: node_exporter скрейп со стороны monitor-node
+  ufw:
+    rule: allow
+    port: '9100'
+    proto: tcp
+
+- name: WireGuard (mesh между Azure VNet и GCP VPC)
+  ufw:
+    rule: allow
+    port: '51820'
+    proto: udp
+
 - name: Включение UFW (Default Deny)
   ufw:
     state: enabled

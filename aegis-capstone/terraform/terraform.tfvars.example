@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+
+# --- required ---
+azure_subscription_id = "00000000-0000-0000-0000-000000000000"
+gcp_project_id        = "my-gcp-project"
+operator_ip           = "203.0.113.42/32" # your workstation public IP — get via: curl ifconfig.me
+
+# --- optional overrides ---
+# azure_location          = "westeurope"
+# gcp_region              = "us-central1"
+# gcp_zone                = "us-central1-a"
+# ssh_public_key_path     = "~/.ssh/id_rsa.pub"
+# vm_admin_user           = "ansible_user"
+# gcp_expose_ssh_publicly = true   # set false after WireGuard mesh is up
