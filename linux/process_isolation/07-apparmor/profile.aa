@@ -1,0 +1,36 @@
+# AppArmor profile для /usr/local/bin/secret-reader.sh
+# Запрещает чтение /etc/passwd, запись в /var/log; разрешает /tmp.
+#include <tunables/global>
+
+/usr/local/bin/secret-reader.sh {
+  #include <abstractions/base>
+  #include <abstractions/bash>
+
+  # разрешаем сам интерпретатор и базовые утилиты
+  /usr/bin/bash ix,
+  /usr/bin/cat  ix,
+  /usr/bin/echo ix,
+  /usr/bin/id   ix,
+  /usr/bin/rm   ix,
+  /usr/bin/dash ix,
+  /bin/bash     ix,
+  /bin/cat      ix,
+  /bin/echo     ix,
+  /bin/id       ix,
+  /bin/rm       ix,
+  /bin/dash     ix,
+  /usr/local/bin/secret-reader.sh r,
+
+  # ЖЁСТКИЙ ЗАПРЕТ: чтение паролей
+  deny /etc/passwd r,
+  deny /etc/shadow rw,
+
+  # /var/log — НЕ разрешено явно (поэтому запись туда упадёт)
+
+  # /tmp — пишем свободно
+  /tmp/** rw,
+
+  # /dev/null чтобы перенаправление работало
+  /dev/null rw,
+  /dev/tty  rw,
+}
