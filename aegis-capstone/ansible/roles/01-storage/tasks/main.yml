@@ -1,19 +1,16 @@
 ---
-- name: Установка зависимостей хранилища (lvm2, xfsprogs, mdadm)
+- name: Установка зависимостей хранилища
   apt:
-    name:
-      - lvm2
-      - xfsprogs
-      - mdadm
+    name: [lvm2, xfsprogs, mdadm]
     state: present
     update_cache: yes
 
-- name: Создание RAID 1 (Зеркало) для etcd (/dev/sdc, /dev/sdd)
+- name: Создание RAID 1 (etcd, redis) /dev/sdc, /dev/sdd
   command: mdadm --create --verbose /dev/md0 --level=1 --raid-devices=2 /dev/sdc /dev/sdd
   args:
     creates: /dev/md0
 
-- name: Создание RAID 5 (Чередование с четностью) для Data (/dev/sde, /dev/sdf, /dev/sdg)
+- name: Создание RAID 5 (pgsql, containerd, rabbitmq) /dev/sde, /dev/sdf, /dev/sdg
   command: mdadm --create --verbose /dev/md1 --level=5 --raid-devices=3 /dev/sde /dev/sdf /dev/sdg
   args:
     creates: /dev/md1
@@ -24,45 +21,42 @@
     creates: /etc/mdadm/mdadm.conf.saved
   notify: update initramfs
 
-- name: Маркер сохранения (чтобы не дублировать конфиг mdadm)
+- name: Маркер сохранения config
   file:
     path: /etc/mdadm/mdadm.conf.saved
     state: touch
 
-- name: Создание Volume Group для etcd (vg_etcd) на RAID 1
+- name: Создание VG (vg_fast на RAID1, vg_data на RAID5)
   lvg:
-    vg: vg_etcd
-    pvs: /dev/md0
+    vg: "{{ item.vg }}"
+    pvs: "{{ item.pvs }}"
+  loop:
+    - { vg: 'vg_fast', pvs: '/dev/md0' }
+    - { vg: 'vg_data', pvs: '/dev/md1' }
 
-- name: Создание Volume Group для Data (vg_data) на RAID 5
-  lvg:
-    vg: vg_data
-    pvs: /dev/md1
-
-- name: Создание Logical Volume для etcd
+- name: Создание Logical Volumes
   lvol:
-    vg: vg_etcd
-    lv: lv_etcd
-    size: 100%FREE
-
-- name: Создание Logical Volumes для App Data (pgsql и containerd)
-  lvol:
-    vg: vg_data
-    lv: "{{ item.name }}"
+    vg: "{{ item.vg }}"
+    lv: "{{ item.lv }}"
     size: "{{ item.size }}"
   loop:
-    - { name: 'lv_pgsql', size: '8G' }
-    - { name: 'lv_containerd', size: '10G' }
+    - { vg: 'vg_fast', lv: 'lv_etcd', size: '2G' }
+    - { vg: 'vg_fast', lv: 'lv_redis', size: '5G' }
+    - { vg: 'vg_data', lv: 'lv_pgsql', size: '8G' }
+    - { vg: 'vg_data', lv: 'lv_rabbitmq', size: '2G' }
+    - { vg: 'vg_data', lv: 'lv_containerd', size: '8G' }
 
 - name: Форматирование томов в ext4
   filesystem:
     fstype: ext4
     dev: "/dev/{{ item.vg }}/{{ item.lv }}"
   loop:
-    - { vg: 'vg_etcd', lv: 'lv_etcd' }
+    - { vg: 'vg_fast', lv: 'lv_etcd' }
+    - { vg: 'vg_fast', lv: 'lv_redis' }
     - { vg: 'vg_data', lv: 'lv_pgsql' }
+    - { vg: 'vg_data', lv: 'lv_rabbitmq' }
 
-- name: Форматирование тома containerd в xfs (Modern OverlayFS pquota support)
+- name: Форматирование тома containerd в xfs (OverlayFS pquota)
   filesystem:
     fstype: xfs
     dev: /dev/vg_data/lv_containerd
@@ -73,24 +67,24 @@
     state: directory
   loop:
     - /var/lib/etcd
+    - /var/lib/redis
     - /var/lib/postgresql
+    - /var/lib/rabbitmq
     - /var/lib/containerd
 
-- name: Монтирование etcd
+- name: Монтирование ext4 томов
   mount:
-    path: /var/lib/etcd
-    src: /dev/vg_etcd/lv_etcd
+    path: "/var/lib/{{ item.name }}"
+    src: "/dev/{{ item.vg }}/lv_{{ item.name }}"
     fstype: ext4
     state: mounted
+  loop:
+    - { name: 'etcd', vg: 'vg_fast' }
+    - { name: 'redis', vg: 'vg_fast' }
+    - { name: 'postgresql', vg: 'vg_data' }
+    - { name: 'rabbitmq', vg: 'vg_data' }
 
-- name: Монтирование postgresql
-  mount:
-    path: /var/lib/postgresql
-    src: /dev/vg_data/lv_pgsql
-    fstype: ext4
-    state: mounted
-
-- name: Монтирование containerd с поддержкой pquota (Project Quotas)
+- name: Монтирование containerd с pquota
   mount:
     path: /var/lib/containerd
     src: /dev/vg_data/lv_containerd

@@ -1,5 +1,5 @@
 ---
-- name: Отключение Swap в рантайме (требование Kubernetes)
+- name: Отключение Swap в рантайме
   command: swapoff -a
   when: ansible_swaptotal_mb > 0
 
@@ -26,7 +26,31 @@
       br_netfilter
       tcp_bbr
 
-- name: Тюнинг параметров ядра (Modern Sysctl Network & FS Tuning)
+- name: Создание Systemd Unit для отключения Transparent Huge Pages (THP) - requirement for Redis
+  copy:
+    dest: /etc/systemd/system/disable-thp.service
+    content: |
+      [Unit]
+      Description=Disable Transparent Huge Pages (THP)
+      DefaultDependencies=no
+      After=sysinit.target local-fs.target
+      Before=redis-server.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/bin/sh -c 'echo never > /sys/kernel/mm/transparent_hugepage/enabled; echo never > /sys/kernel/mm/transparent_hugepage/defrag'
+
+      [Install]
+      WantedBy=basic.target
+  notify: reload systemd
+
+- name: Включение сервиса отключения THP
+  systemd:
+    name: disable-thp.service
+    enabled: yes
+    state: started
+
+- name: Тюнинг параметров ядра (Stateful Tier & K8s Networking)
   sysctl:
     name: "{{ item.key }}"
     value: "{{ item.value }}"
@@ -34,21 +58,21 @@
     state: present
     reload: yes
   loop:
-    # Маршрутизация для CNI (Kubernetes)
+    # Оптимизация PostgreSQL (I/O Flush tuning)
+    - { key: 'vm.dirty_background_ratio', value: '5' }
+    - { key: 'vm.dirty_ratio', value: '15' }
+    # Оптимизация Redis (Overcommit)
+    - { key: 'vm.overcommit_memory', value: '1' }
+    # Маршрутизация для K8s
     - { key: 'net.ipv4.ip_forward', value: '1' }
     - { key: 'net.bridge.bridge-nf-call-iptables', value: '1' }
-    - { key: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
-    # Оптимизация сети и BBR
+    # Оптимизация TCP (HAProxy / Web)
     - { key: 'net.core.default_qdisc', value: 'fq' }
     - { key: 'net.ipv4.tcp_congestion_control', value: 'bbr' }
     - { key: 'net.core.somaxconn', value: '65535' }
-    - { key: 'net.ipv4.tcp_max_syn_backlog', value: '65535' }
-    - { key: 'net.ipv4.tcp_tw_reuse', value: '1' }
-    # Файловая система и Inotify (подготовка к K8s / DB)
+    - { key: 'net.ipv4.ip_local_port_range', value: '1024 65535' }
+    # Файловые дескрипторы (RabbitMQ & HAProxy & K8s)
     - { key: 'fs.file-max', value: '2000000' }
     - { key: 'fs.inotify.max_user_watches', value: '524288' }
-    - { key: 'fs.inotify.max_user_instances', value: '8192' }
-    # Управление памятью (K8s scheduler expects this)
+    # Управление памятью
     - { key: 'vm.swappiness', value: '0' }
-    - { key: 'vm.overcommit_memory', value: '1' }
-    - { key: 'vm.panic_on_oom', value: '0' }

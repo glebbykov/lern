@@ -1,0 +1,21 @@
+---
+- name: Установка компонентов Stateful Tier (Load Balancer, DBs, Brokers, Cache)
+  apt:
+    name:
+      - haproxy
+      - postgresql
+      - redis-server
+      - rabbitmq-server
+    state: present
+    update_cache: yes
+
+- name: Убеждаемся, что сервисы БД включены и запущены
+  systemd:
+    name: "{{ item }}"
+    state: started
+    enabled: yes
+  loop:
+    - haproxy
+    - postgresql
+    - redis-server
+    - rabbitmq-server
