@@ -1,7 +1,7 @@
 ---
 - name: Установка зависимостей хранилища
   apt:
-    name: [lvm2, xfsprogs, mdadm]
+    name: [lvm2, xfsprogs]
     state: present
     update_cache: yes
 
@@ -39,7 +39,7 @@
     - { vg: 'vg_etcd',  lv: 'lv_etcd' }
   when: "'db_nodes' in group_names"
 
-- name: Форматирование тома MongoDB в XFS (Best practice for WiredTiger)
+- name: Форматирование тома MongoDB в XFS
   filesystem:
     fstype: xfs
     dev: "/dev/vg_mongo/lv_mongo"
@@ -72,56 +72,36 @@
     state: mounted
   when: "'db_nodes' in group_names"
 
-
-# --- KAFKA NODE (RAID 5) ---
-- name: Создание RAID 5 (kafka) /dev/sdc, /dev/sdd, /dev/sde на kafka-node
-  command: mdadm --create --verbose /dev/md1 --level=5 --raid-devices=3 /dev/sdc /dev/sdd /dev/sde
-  args:
-    creates: /dev/md1
-  when: "'kafka_nodes' in group_names"
-
-- name: Сохранение конфигурации RAID
-  shell: mdadm --detail --scan >> /etc/mdadm/mdadm.conf
-  args:
-    creates: /etc/mdadm/mdadm.conf.saved
-  notify: update initramfs
-  when: "'kafka_nodes' in group_names"
-
-- name: Маркер сохранения config
-  file:
-    path: /etc/mdadm/mdadm.conf.saved
-    state: touch
-  when: "'kafka_nodes' in group_names"
-
-- name: Создание VG vg_kafka на RAID 5
+# --- APP NODE (Kafka / VictoriaMetrics Storage) ---
+- name: Создание VG vg_app на прикрепленном диске
   lvg:
-    vg: vg_kafka
-    pvs: /dev/md1
-  when: "'kafka_nodes' in group_names"
+    vg: vg_app
+    pvs: /dev/sdc
+  when: "'app_nodes' in group_names"
 
-- name: Создание Logical Volume для Kafka
+- name: Создание LV для Kafka
   lvol:
-    vg: vg_kafka
+    vg: vg_app
     lv: lv_kafka
     size: 100%FREE
-  when: "'kafka_nodes' in group_names"
+  when: "'app_nodes' in group_names"
 
-- name: Форматирование тома Kafka в XFS (Best practice for Kafka)
+- name: Форматирование тома Kafka в XFS
   filesystem:
     fstype: xfs
-    dev: /dev/vg_kafka/lv_kafka
-  when: "'kafka_nodes' in group_names"
+    dev: /dev/vg_app/lv_kafka
+  when: "'app_nodes' in group_names"
 
-- name: Создание точки монтирования Kafka
+- name: Точка монтирования Kafka
   file:
     path: /var/lib/kafka
     state: directory
-  when: "'kafka_nodes' in group_names"
+  when: "'app_nodes' in group_names"
 
 - name: Монтирование Kafka
   mount:
     path: /var/lib/kafka
-    src: /dev/vg_kafka/lv_kafka
+    src: /dev/vg_app/lv_kafka
     fstype: xfs
     state: mounted
-  when: "'kafka_nodes' in group_names"
+  when: "'app_nodes' in group_names"

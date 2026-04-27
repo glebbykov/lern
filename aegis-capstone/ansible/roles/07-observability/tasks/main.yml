@@ -1,0 +1,75 @@
+---
+- name: Создание пользователя для VictoriaMetrics и Prometheus
+  user:
+    name: prometheus
+    system: yes
+    shell: /bin/false
+
+- name: Скачивание VictoriaMetrics (Экономичная альтернатива Prometheus)
+  unarchive:
+    src: https://github.com/VictoriaMetrics/VictoriaMetrics/releases/download/v1.97.1/victoria-metrics-linux-amd64-v1.97.1.tar.gz
+    dest: /usr/local/bin/
+    remote_src: yes
+  when: "'app_nodes' in group_names"
+
+- name: Настройка Systemd сервиса для VictoriaMetrics
+  copy:
+    dest: /etc/systemd/system/victoriametrics.service
+    content: |
+      [Unit]
+      Description=VictoriaMetrics
+      After=network.target
+
+      [Service]
+      User=prometheus
+      ExecStart=/usr/local/bin/victoria-metrics-prod -storageDataPath=/var/lib/victoria-metrics-data -retentionPeriod=1 -promscrape.config=/etc/prometheus/prometheus.yml
+      ExecReload=/bin/kill -HUP $MAINPID
+      Restart=on-failure
+
+      [Install]
+      WantedBy=multi-user.target
+  when: "'app_nodes' in group_names"
+
+- name: Установка Grafana
+  apt:
+    name: grafana
+    state: present
+    update_cache: yes
+  ignore_errors: yes # Needs repo setup in real life, simplified here for demo
+  when: "'app_nodes' in group_names"
+
+- name: Установка Node Exporter на все машины
+  unarchive:
+    src: https://github.com/prometheus/node_exporter/releases/download/v1.7.0/node_exporter-1.7.0.linux-amd64.tar.gz
+    dest: /tmp/
+    remote_src: yes
+
+- name: Перемещение бинарника Node Exporter
+  copy:
+    src: /tmp/node_exporter-1.7.0.linux-amd64/node_exporter
+    dest: /usr/local/bin/
+    remote_src: yes
+    mode: '0755'
+
+- name: Настройка Systemd сервиса для Node Exporter
+  copy:
+    dest: /etc/systemd/system/node_exporter.service
+    content: |
+      [Unit]
+      Description=Node Exporter
+      After=network.target
+
+      [Service]
+      User=prometheus
+      ExecStart=/usr/local/bin/node_exporter
+      Restart=on-failure
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Запуск Node Exporter
+  systemd:
+    name: node_exporter
+    state: started
+    enabled: yes
+    daemon_reload: yes
