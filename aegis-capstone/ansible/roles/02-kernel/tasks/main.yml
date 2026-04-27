@@ -3,19 +3,20 @@
   command: swapoff -a
   when: ansible_swaptotal_mb > 0
 
-- name: Удаление Swap из /etc/fstab (чтобы не включился после ребута)
+- name: Удаление Swap из /etc/fstab
   replace:
     path: /etc/fstab
     regexp: '^([^#].*?\sswap\s+sw\s+.*)$'
     replace: '# \1'
 
-- name: Загрузка модулей ядра (overlay, br_netfilter)
+- name: Загрузка современных модулей ядра (overlay, br_netfilter, tcp_bbr)
   modprobe:
     name: "{{ item }}"
     state: present
   loop:
     - overlay
     - br_netfilter
+    - tcp_bbr
 
 - name: Сохранение загрузки модулей после ребута
   copy:
@@ -23,8 +24,9 @@
     content: |
       overlay
       br_netfilter
+      tcp_bbr
 
-- name: Тюнинг параметров ядра (sysctl)
+- name: Тюнинг параметров ядра (Modern Sysctl Network & FS Tuning)
   sysctl:
     name: "{{ item.key }}"
     value: "{{ item.value }}"
@@ -32,8 +34,21 @@
     state: present
     reload: yes
   loop:
+    # Маршрутизация для CNI (Kubernetes)
     - { key: 'net.ipv4.ip_forward', value: '1' }
+    - { key: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+    - { key: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+    # Оптимизация сети и BBR
+    - { key: 'net.core.default_qdisc', value: 'fq' }
+    - { key: 'net.ipv4.tcp_congestion_control', value: 'bbr' }
+    - { key: 'net.core.somaxconn', value: '65535' }
+    - { key: 'net.ipv4.tcp_max_syn_backlog', value: '65535' }
+    - { key: 'net.ipv4.tcp_tw_reuse', value: '1' }
+    # Файловая система и Inotify (подготовка к K8s / DB)
     - { key: 'fs.file-max', value: '2000000' }
     - { key: 'fs.inotify.max_user_watches', value: '524288' }
-    - { key: 'net.core.somaxconn', value: '65535' }
-    - { key: 'net.ipv4.tcp_tw_reuse', value: '1' }
+    - { key: 'fs.inotify.max_user_instances', value: '8192' }
+    # Управление памятью (K8s scheduler expects this)
+    - { key: 'vm.swappiness', value: '0' }
+    - { key: 'vm.overcommit_memory', value: '1' }
+    - { key: 'vm.panic_on_oom', value: '0' }

@@ -1,59 +1,99 @@
 ---
-- name: Установка пакетов lvm2 и xfsprogs
+- name: Установка зависимостей хранилища (lvm2, xfsprogs, mdadm)
   apt:
     name:
       - lvm2
       - xfsprogs
+      - mdadm
     state: present
     update_cache: yes
 
-- name: Создание Volume Group (vg_aegis_data) из двух присоединенных дисков
-  lvg:
-    vg: vg_aegis_data
-    # В Azure пустые data-диски обычно монтируются как /dev/sdc и /dev/sdd
-    pvs: /dev/sdc,/dev/sdd
+- name: Создание RAID 1 (Зеркало) для etcd (/dev/sdc, /dev/sdd)
+  command: mdadm --create --verbose /dev/md0 --level=1 --raid-devices=2 /dev/sdc /dev/sdd
+  args:
+    creates: /dev/md0
 
-- name: Создание Logical Volumes (etcd, pgsql, containerd)
+- name: Создание RAID 5 (Чередование с четностью) для Data (/dev/sde, /dev/sdf, /dev/sdg)
+  command: mdadm --create --verbose /dev/md1 --level=5 --raid-devices=3 /dev/sde /dev/sdf /dev/sdg
+  args:
+    creates: /dev/md1
+
+- name: Сохранение конфигурации RAID
+  shell: mdadm --detail --scan >> /etc/mdadm/mdadm.conf
+  args:
+    creates: /etc/mdadm/mdadm.conf.saved
+  notify: update initramfs
+
+- name: Маркер сохранения (чтобы не дублировать конфиг mdadm)
+  file:
+    path: /etc/mdadm/mdadm.conf.saved
+    state: touch
+
+- name: Создание Volume Group для etcd (vg_etcd) на RAID 1
+  lvg:
+    vg: vg_etcd
+    pvs: /dev/md0
+
+- name: Создание Volume Group для Data (vg_data) на RAID 5
+  lvg:
+    vg: vg_data
+    pvs: /dev/md1
+
+- name: Создание Logical Volume для etcd
   lvol:
-    vg: vg_aegis_data
+    vg: vg_etcd
+    lv: lv_etcd
+    size: 100%FREE
+
+- name: Создание Logical Volumes для App Data (pgsql и containerd)
+  lvol:
+    vg: vg_data
     lv: "{{ item.name }}"
     size: "{{ item.size }}"
   loop:
-    - { name: 'lv_etcd', size: '5G' }
-    - { name: 'lv_pgsql', size: '15G' }
-    - { name: 'lv_containerd', size: '15G' }
+    - { name: 'lv_pgsql', size: '8G' }
+    - { name: 'lv_containerd', size: '10G' }
 
-- name: Форматирование lv_etcd и lv_pgsql в ext4
+- name: Форматирование томов в ext4
   filesystem:
     fstype: ext4
-    dev: "/dev/vg_aegis_data/{{ item }}"
+    dev: "/dev/{{ item.vg }}/{{ item.lv }}"
   loop:
-    - lv_etcd
-    - lv_pgsql
+    - { vg: 'vg_etcd', lv: 'lv_etcd' }
+    - { vg: 'vg_data', lv: 'lv_pgsql' }
 
-- name: Форматирование lv_containerd в xfs
+- name: Форматирование тома containerd в xfs (Modern OverlayFS pquota support)
   filesystem:
     fstype: xfs
-    dev: /dev/vg_aegis_data/lv_containerd
+    dev: /dev/vg_data/lv_containerd
+
+- name: Создание точек монтирования
+  file:
+    path: "{{ item }}"
+    state: directory
+  loop:
+    - /var/lib/etcd
+    - /var/lib/postgresql
+    - /var/lib/containerd
 
 - name: Монтирование etcd
   mount:
     path: /var/lib/etcd
-    src: /dev/vg_aegis_data/lv_etcd
+    src: /dev/vg_etcd/lv_etcd
     fstype: ext4
     state: mounted
 
 - name: Монтирование postgresql
   mount:
     path: /var/lib/postgresql
-    src: /dev/vg_aegis_data/lv_pgsql
+    src: /dev/vg_data/lv_pgsql
     fstype: ext4
     state: mounted
 
 - name: Монтирование containerd с поддержкой pquota (Project Quotas)
   mount:
     path: /var/lib/containerd
-    src: /dev/vg_aegis_data/lv_containerd
+    src: /dev/vg_data/lv_containerd
     fstype: xfs
     opts: defaults,pquota
     state: mounted

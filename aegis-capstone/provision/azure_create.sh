@@ -33,10 +33,13 @@ az vm create -g $RG_NAME -n bastion-host --image Ubuntu2204 --size Standard_B1s 
   --vnet-name $VNET_NAME --subnet $SUBNET_DMZ --admin-username $ADMIN_USER --generate-ssh-keys \
   --public-ip-sku Standard --nsg "" 
 
-echo "=== 5. Создание Application Node (БЕЗ Public IP, с 2мя доп. дисками) ==="
+echo "=== 5. Создание Application Node (Advanced Bare-Metal Simulation) ==="
+# Подключаем 5 дисков по 10 ГБ:
+# LUN 0, 1 (sdc, sdd) -> Пойдут под RAID 1 (etcd)
+# LUN 2, 3, 4 (sde, sdf, sdg) -> Пойдут под RAID 5 (Data/Containerd)
 az vm create -g $RG_NAME -n app-node --image Ubuntu2204 --size Standard_B2s \
   --vnet-name $VNET_NAME --subnet $SUBNET_APP --admin-username $ADMIN_USER --ssh-key-values ~/.ssh/id_rsa.pub \
-  --public-ip-address "" --nsg "" --data-disk-sizes-gb 20 20
+  --public-ip-address "" --nsg "" --data-disk-sizes-gb 10 10 10 10 10
 
 echo "=== ИНФРАСТРУКТУРА ГОТОВА ==="
 BASTION_IP=$(az vm show -d -g $RG_NAME -n bastion-host --query publicIps -o tsv)
