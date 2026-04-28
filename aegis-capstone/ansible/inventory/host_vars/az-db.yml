@@ -8,4 +8,8 @@
   "fs": "xfs"
   "mount": "/var/lib/mongodb"
   "name": "mongo"
+- "dev": "/dev/sdb"
+  "fs": "ext4"
+  "mount": "/var/lib/redis"
+  "name": "redis"
 "aegis_raid_devices": []
