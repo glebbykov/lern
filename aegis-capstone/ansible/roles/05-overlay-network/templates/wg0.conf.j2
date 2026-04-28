@@ -1,0 +1,17 @@
+[Interface]
+# Уникальный Overlay IP этого узла
+Address = {{ wg_overlay_ip }}/24
+ListenPort = 51820
+PrivateKey = {{ wg_private_key }}
+
+{% for peer in groups['azure_nodes'] %}
+{% if peer != inventory_hostname and hostvars[peer].wg_public_key is defined %}
+[Peer]
+# Имя узла: {{ peer }}
+PublicKey = {{ hostvars[peer].wg_public_key }}
+AllowedIPs = {{ hostvars[peer].wg_overlay_ip }}/32
+# Подключение к реальному внутреннему IP пира
+Endpoint = {{ hostvars[peer].ansible_host }}:51820
+PersistentKeepalive = 25
+{% endif %}
+{% endfor %}

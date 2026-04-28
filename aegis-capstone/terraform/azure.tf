@@ -80,6 +80,24 @@ resource "azurerm_virtual_network_peering" "p31" {
   allow_forwarded_traffic      = true
 }
 
+resource "azurerm_virtual_network_peering" "p23" {
+  name                         = "p23"
+  resource_group_name          = azurerm_resource_group.r2.name
+  virtual_network_name         = azurerm_virtual_network.v2.name
+  remote_virtual_network_id    = azurerm_virtual_network.v3.id
+  allow_virtual_network_access = true
+  allow_forwarded_traffic      = true
+}
+
+resource "azurerm_virtual_network_peering" "p32" {
+  name                         = "p32"
+  resource_group_name          = azurerm_resource_group.r3.name
+  virtual_network_name         = azurerm_virtual_network.v3.name
+  remote_virtual_network_id    = azurerm_virtual_network.v2.id
+  allow_virtual_network_access = true
+  allow_forwarded_traffic      = true
+}
+
 resource "azurerm_subnet" "s1" {
   name                 = "sub1"
   resource_group_name  = azurerm_resource_group.r1.name

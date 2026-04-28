@@ -1,39 +1,42 @@
 ---
-- name: Setup Application Node (Ingress & Bastion)
+# ---------------------------------------------------------------------------
+# Project Aegis: Main Playbook
+# ---------------------------------------------------------------------------
+
+# 1. Base Layer: Infrastructure & Connectivity
+- name: Common foundation (storage, kernel, mesh, firewall)
+  hosts: azure_nodes
+  become: yes
+  roles:
+    - 01-storage              # Disks, RAID, LVM, Mounts
+    - 02-kernel               # Sysctl, THP, Kernel Modules
+    - 05-overlay-network      # WireGuard Mesh
+    - 03-security             # UFW (with WG rule), SSH, Auditd
+
+# 2. Container Runtime: Future K8s
+- name: Container runtime (app node only)
+  hosts: runtime_hosts
+  become: yes
+  roles:
+    - 04-runtime
+
+# 3. Stateful Layer: DBs, Kafka, etcd, Nginx
+- name: Stateful tier (db / kafka / etcd / nginx)
+  hosts: stateful:app_nodes
+  become: yes
+  roles:
+    - 06-stateful-tier
+
+# 4. App Sandbox
+- name: App sandbox
   hosts: app_nodes
   become: yes
   roles:
-    - 02-kernel
-    - 03-security
-    - 04-runtime
-    - 06-stateful-tier
-    - 07-observability
+    - 05-app-sandbox
 
-- name: Setup Database Node (I/O Isolated Storage)
-  hosts: db_nodes
+# 5. Observability: Last step to ensure targets are up
+- name: Observability
+  hosts: azure_nodes
   become: yes
   roles:
-    - 01-storage
-    - 02-kernel
-    - 03-security
-    - 06-stateful-tier
-    - 07-observability
-
-- name: Setup Kafka Message Broker (RAID 5)
-  hosts: kafka_nodes
-  become: yes
-  roles:
-    - 01-storage
-    - 02-kernel
-    - 03-security
-    - 06-stateful-tier
-    - 07-observability
-
-- name: Setup Observability Central Server
-  hosts: monitor_nodes
-  become: yes
-  roles:
-    - 01-storage
-    - 02-kernel
-    - 03-security
     - 07-observability

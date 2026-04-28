@@ -3,22 +3,22 @@ resource "local_file" "inventory" {
   filename = "../ansible/inventory/hosts.ini"
   content  = <<-EOT
     [app_nodes]
-    az-app ansible_host=$${azurerm_public_ip.app.ip_address}
+    az-app ansible_host=${azurerm_public_ip.app.ip_address}
 
     [monitor_nodes]
     az-app
 
     [db_nodes]
-    az-db ansible_host=$${azurerm_network_interface.nics["db"].private_ip_address}
+    az-db ansible_host=${azurerm_network_interface.nics["db"].private_ip_address}
 
     [kafka_nodes]
-    az-kafka ansible_host=$${azurerm_network_interface.nics["kafka"].private_ip_address}
+    az-kafka ansible_host=${azurerm_network_interface.nics["kafka"].private_ip_address}
 
     [etcd_nodes]
-    az-etcd ansible_host=$${azurerm_network_interface.nics["etcd"].private_ip_address}
+    az-etcd ansible_host=${azurerm_network_interface.nics["etcd"].private_ip_address}
 
     [storage_nodes]
-    az-storage ansible_host=$${azurerm_network_interface.nics["storage"].private_ip_address}
+    az-storage ansible_host=${azurerm_network_interface.nics["storage"].private_ip_address}
 
     [azure_nodes]
     az-app
@@ -27,9 +27,21 @@ resource "local_file" "inventory" {
     az-etcd
     az-storage
 
-    [all:vars]
-    ansible_user=$${var.vm_admin_user}
+    [app_nodes:vars]
     ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null'
+
+    [private_nodes:children]
+    db_nodes
+    kafka_nodes
+    etcd_nodes
+    storage_nodes
+
+    [private_nodes:vars]
+    ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o ProxyCommand="ssh -W %h:%p -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null ${var.vm_admin_user}@${azurerm_public_ip.app.ip_address}"'
+
+    [all:vars]
+    ansible_user=${var.vm_admin_user}
+    ansible_ssh_private_key_file=~/.ssh/id_ed25519
   EOT
 }
 
@@ -38,13 +50,17 @@ resource "local_file" "ssh_config" {
   file_permission = "0600"
   content         = <<-EOT
     Host az-app
-        HostName $${azurerm_public_ip.app.ip_address}
-        User $${var.vm_admin_user}
+        HostName ${azurerm_public_ip.app.ip_address}
+        User ${var.vm_admin_user}
+        IdentityFile ~/.ssh/id_ed25519
         StrictHostKeyChecking accept-new
+        UserKnownHostsFile /dev/null
     Host az-*
         ProxyJump az-app
-        User $${var.vm_admin_user}
+        User ${var.vm_admin_user}
+        IdentityFile ~/.ssh/id_ed25519
         StrictHostKeyChecking accept-new
+        UserKnownHostsFile /dev/null
   EOT
 }
 

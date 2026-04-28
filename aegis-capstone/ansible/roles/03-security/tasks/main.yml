@@ -20,13 +20,21 @@
   loop: ['80', '443']
   when: "'app_nodes' in group_names"
 
-- name: East-west порты БД (Postgres / MongoDB / Redis / etcd)
+- name: East-west порты БД (Postgres / MongoDB / Redis)
   ufw:
     rule: allow
     port: "{{ item }}"
     proto: tcp
-  loop: ['5432', '27017', '6379', '2379', '2380']
+  loop: ['5432', '27017', '6379']
   when: "'db_nodes' in group_names"
+
+- name: East-west порты etcd
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop: ['2379', '2380']
+  when: "'etcd_nodes' in group_names"
 
 - name: Kafka broker / controller
   ufw:
@@ -44,13 +52,13 @@
   loop: ['8428', '3000']
   when: "'monitor_nodes' in group_names"
 
-- name: node_exporter скрейп со стороны monitor-node
+- name: node_exporter скрейп (внутри overlay)
   ufw:
     rule: allow
     port: '9100'
     proto: tcp
 
-- name: WireGuard (mesh между Azure VNet и GCP VPC)
+- name: WireGuard (mesh)
   ufw:
     rule: allow
     port: '51820'

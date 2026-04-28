@@ -1,0 +1,11 @@
+"aegis_cloud": "azure"
+"aegis_data_devices":
+- "dev": "/dev/sdc"
+  "fs": "xfs"
+  "mount": "/mnt/backups_1"
+  "name": "backups_1"
+- "dev": "/dev/sdd"
+  "fs": "xfs"
+  "mount": "/mnt/backups_2"
+  "name": "backups_2"
+"aegis_raid_devices": []

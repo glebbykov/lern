@@ -1,103 +1,117 @@
 ---
-- name: Установка Nginx (App/LB Node)
-  apt: name=nginx state=present update_cache=yes
+# --- APP NODE (Nginx / LB) ---
+- name: Setup App Node Tier
+  block:
+    - name: Установка Nginx
+      apt: name=nginx state=present update_cache=yes
+
+    - name: Запуск Nginx
+      systemd: name=nginx state=started enabled=yes
   when: "'app_nodes' in group_names"
 
 # --- DB NODE (PostgreSQL, Redis, MongoDB) ---
-- name: Установка базовых БД (PostgreSQL, Redis)
-  apt:
-    name: [postgresql, redis-server]
-    state: present
-    update_cache: yes
+- name: Setup Database Tier
+  block:
+    - name: Установка PostgreSQL и Redis
+      apt:
+        name: [postgresql, redis-server]
+        state: present
+        update_cache: yes
+
+    - name: Добавление GPG ключа MongoDB
+      get_url:
+        url: https://www.mongodb.org/static/pgp/server-7.0.asc
+        dest: /etc/apt/trusted.gpg.d/mongodb-server-7.0.asc
+
+    - name: Добавление репозитория MongoDB 7.0
+      apt_repository:
+        repo: "deb [ arch=amd64,arm64 signed-by=/etc/apt/trusted.gpg.d/mongodb-server-7.0.asc ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse"
+        state: present
+        filename: mongodb-org-7.0
+
+    - name: Установка MongoDB
+      apt:
+        name: mongodb-org
+        state: present
+        update_cache: yes
+
+    - name: Запуск баз данных
+      systemd: name="{{ item }}" state=started enabled=yes
+      loop: [postgresql, redis-server, mongod]
   when: "'db_nodes' in group_names"
 
-- name: Добавление GPG ключа MongoDB
-  get_url:
-    url: https://www.mongodb.org/static/pgp/server-7.0.asc
-    dest: /etc/apt/trusted.gpg.d/mongodb-server-7.0.asc
-  when: "'db_nodes' in group_names"
+# --- KAFKA NODE ---
+- name: Setup Kafka Tier
+  block:
+    - name: Установка Java
+      apt: name=default-jre state=present update_cache=yes
 
-- name: Добавление репозитория MongoDB 7.0
-  apt_repository:
-    repo: "deb [ arch=amd64,arm64 signed-by=/etc/apt/trusted.gpg.d/mongodb-server-7.0.asc ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse"
-    state: present
-    filename: mongodb-org-7.0
-  when: "'db_nodes' in group_names"
+    - name: Скачивание и распаковка Apache Kafka
+      unarchive:
+        src: https://archive.apache.org/dist/kafka/3.7.0/kafka_2.13-3.7.0.tgz
+        dest: /opt/
+        remote_src: yes
 
-- name: Установка MongoDB
-  apt:
-    name: mongodb-org
-    state: present
-    update_cache: yes
-  when: "'db_nodes' in group_names"
+    - name: Создание симлинка для Kafka
+      file:
+        src: /opt/kafka_2.13-3.7.0
+        dest: /opt/kafka
+        state: link
 
+    - name: Изменение директории логов в server.properties (KRaft)
+      lineinfile:
+        path: /opt/kafka/config/kraft/server.properties
+        regexp: '^log.dirs='
+        line: 'log.dirs=/var/lib/kafka'
 
-# --- KAFKA KRAFT INSTALLATION ---
-- name: Установка Java для Kafka
-  apt: name=default-jre state=present update_cache=yes
+    - name: Форматирование хранилища KRaft (только один раз)
+      shell: |
+        UUID=$(/opt/kafka/bin/kafka-storage.sh random-uuid)
+        /opt/kafka/bin/kafka-storage.sh format -t $UUID -c /opt/kafka/config/kraft/server.properties
+        touch /var/lib/kafka/.kraft_formatted
+      args:
+        creates: /var/lib/kafka/.kraft_formatted
+
+    - name: Настройка Systemd сервиса для Kafka
+      copy:
+        dest: /etc/systemd/system/kafka.service
+        content: |
+          [Unit]
+          Description=Apache Kafka Server (KRaft mode)
+          Documentation=http://kafka.apache.org/documentation.html
+          Requires=network.target
+          After=network.target
+
+          [Service]
+          Type=simple
+          Environment="JAVA_HOME=/usr/lib/jvm/default-java"
+          ExecStart=/opt/kafka/bin/kafka-server-start.sh /opt/kafka/config/kraft/server.properties
+          ExecStop=/opt/kafka/bin/kafka-server-stop.sh
+          Restart=on-abnormal
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Запуск Kafka
+      systemd: name=kafka state=started enabled=yes daemon_reload=yes
   when: "'kafka_nodes' in group_names"
 
-- name: Скачивание и распаковка Apache Kafka
-  unarchive:
-    src: https://archive.apache.org/dist/kafka/3.7.0/kafka_2.13-3.7.0.tgz
-    dest: /opt/
-    remote_src: yes
-  when: "'kafka_nodes' in group_names"
+# --- ETCD NODE ---
+- name: Setup etcd Tier
+  block:
+    - name: Установка etcd-server
+      apt: name=etcd-server state=present update_cache=yes
 
-- name: Создание симлинка для Kafka
-  file:
-    src: /opt/kafka_2.13-3.7.0
-    dest: /opt/kafka
-    state: link
-  when: "'kafka_nodes' in group_names"
+    - name: Настройка etcd
+      copy:
+        dest: /etc/default/etcd
+        content: |
+          ETCD_NAME="{{ inventory_hostname }}"
+          ETCD_DATA_DIR="/var/lib/etcd/default.etcd"
+          ETCD_LISTEN_PEER_URLS="http://0.0.0.0:2380"
+          ETCD_LISTEN_CLIENT_URLS="http://0.0.0.0:2379"
+          ETCD_ADVERTISE_CLIENT_URLS="http://localhost:2379"
 
-- name: Изменение директории логов в server.properties (KRaft)
-  lineinfile:
-    path: /opt/kafka/config/kraft/server.properties
-    regexp: '^log.dirs='
-    line: 'log.dirs=/var/lib/kafka'
-  when: "'kafka_nodes' in group_names"
-
-- name: Форматирование хранилища KRaft (только один раз)
-  shell: |
-    UUID=$(/opt/kafka/bin/kafka-storage.sh random-uuid)
-    /opt/kafka/bin/kafka-storage.sh format -t $UUID -c /opt/kafka/config/kraft/server.properties
-    touch /var/lib/kafka/.kraft_formatted
-  args:
-    creates: /var/lib/kafka/.kraft_formatted
-  when: "'kafka_nodes' in group_names"
-
-- name: Настройка Systemd сервиса для Kafka KRaft
-  copy:
-    dest: /etc/systemd/system/kafka.service
-    content: |
-      [Unit]
-      Description=Apache Kafka Server (KRaft mode)
-      Documentation=http://kafka.apache.org/documentation.html
-      Requires=network.target
-      After=network.target
-
-      [Service]
-      Type=simple
-      Environment="JAVA_HOME=/usr/lib/jvm/default-java"
-      ExecStart=/opt/kafka/bin/kafka-server-start.sh /opt/kafka/config/kraft/server.properties
-      ExecStop=/opt/kafka/bin/kafka-server-stop.sh
-      Restart=on-abnormal
-
-      [Install]
-      WantedBy=multi-user.target
-  when: "'kafka_nodes' in group_names"
-  notify: restart kafka
-
-- name: Запуск Nginx (App Node)
-  systemd: name=nginx state=started enabled=yes
-  when: "'app_nodes' in group_names"
-
-- name: Запуск DBs (DB Node)
-  systemd: name="{{ item }}" state=started enabled=yes
-  loop: [postgresql, redis-server, mongod]
-  when: "'db_nodes' in group_names"
-
-- name: Запуск Kafka (Kafka Node)
-  systemd: name=kafka state=started enabled=yes daemon_reload=yes
-  when: "'kafka_nodes' in group_names"
+    - name: Запуск etcd
+      systemd: name=etcd state=started enabled=yes
+  when: "'etcd_nodes' in group_names"

@@ -1,6 +1,13 @@
 ---
-- name: Отключение Swap
+- name: Отключение Swap (runtime)
   command: swapoff -a
+  when: ansible_swaptotal_mb > 0
+
+- name: Отключение Swap в fstab (persistence)
+  replace:
+    path: /etc/fstab
+    regexp: '^([^#].*?\sswap\s+sw\s+.*)$'
+    replace: '# \1'
 
 - name: Загрузка модулей ядра
   modprobe:
@@ -8,7 +15,15 @@
     state: present
   loop: [overlay, br_netfilter, tcp_bbr]
 
-- name: Создание Systemd Unit для отключения Transparent Huge Pages (THP) - requirement for Redis & MongoDB
+- name: Персистентная загрузка модулей
+  copy:
+    dest: /etc/modules-load.d/aegis.conf
+    content: |
+      overlay
+      br_netfilter
+      tcp_bbr
+
+- name: Создание Systemd Unit для отключения Transparent Huge Pages (THP)
   copy:
     dest: /etc/systemd/system/disable-thp.service
     content: |
@@ -58,7 +73,7 @@
     - { key: 'vm.dirty_background_ratio', value: '5' }
     - { key: 'vm.dirty_ratio', value: '15' }
     - { key: 'vm.overcommit_memory', value: '1' }
-    - { key: 'vm.zone_reclaim_mode', value: '0' } # Best practice for MongoDB to prevent NUMA performance cliffs
+    - { key: 'vm.zone_reclaim_mode', value: '0' }
   when: "'db_nodes' in group_names"
 
 - name: Тюнинг для Kafka (Page Cache Optimization)

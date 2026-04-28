@@ -1,0 +1,7 @@
+"aegis_cloud": "azure"
+"aegis_data_devices":
+- "dev": "/dev/sdc"
+  "fs": "xfs"
+  "mount": "/var/lib/kafka/data0"
+  "name": "kafka_jbod0"
+"aegis_raid_devices": []

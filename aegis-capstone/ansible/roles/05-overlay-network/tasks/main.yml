@@ -1,0 +1,56 @@
+---
+- name: Установка WireGuard
+  apt:
+    name: wireguard
+    state: present
+    update_cache: yes
+
+- name: Убедиться, что директория WireGuard существует
+  file:
+    path: /etc/wireguard
+    state: directory
+    mode: '0700'
+
+- name: Проверка наличия приватного ключа
+  stat:
+    path: /etc/wireguard/privatekey
+  register: wg_priv_stat
+
+- name: Генерация ключей WireGuard
+  shell: |
+    set -o pipefail
+    umask 077
+    wg genkey | tee /etc/wireguard/privatekey | wg pubkey > /etc/wireguard/publickey
+  args:
+    executable: /bin/bash
+  when: not wg_priv_stat.stat.exists
+
+- name: Чтение приватного ключа
+  slurp:
+    src: /etc/wireguard/privatekey
+  register: wg_priv_raw
+
+- name: Чтение публичного ключа
+  slurp:
+    src: /etc/wireguard/publickey
+  register: wg_pub_raw
+
+- name: Установка фактов WireGuard для текущего узла
+  set_fact:
+    wg_private_key: "{{ wg_priv_raw['content'] | b64decode | trim }}"
+    wg_public_key: "{{ wg_pub_raw['content'] | b64decode | trim }}"
+    # Генерируем IP на основе индекса узла в группе azure_nodes (от 10 до 255)
+    wg_overlay_ip: "10.100.0.{{ groups['azure_nodes'].index(inventory_hostname) + 10 }}"
+
+- name: Генерация конфигурации wg0.conf
+  template:
+    src: wg0.conf.j2
+    dest: /etc/wireguard/wg0.conf
+    mode: '0600'
+  notify: Restart WireGuard
+
+- name: Включение и запуск интерфейса wg0
+  systemd:
+    name: wg-quick@wg0
+    state: started
+    enabled: yes
