@@ -1,5 +1,7 @@
 ---
 # --- APP NODE (Nginx / LB) ---
+# Зачем: Ingress-слой для приема внешнего трафика.
+# Почему так: Группируем задачи через block для чистоты кода и единого условия when.
 - name: Setup App Node Tier
   block:
     - name: Установка Nginx
@@ -10,6 +12,8 @@
   when: "'app_nodes' in group_names"
 
 # --- DB NODE (PostgreSQL, Redis, MongoDB) ---
+# Зачем: Развернуть State-слой (реляционная БД, NoSQL аудит, кэш).
+# Почему так: Ставится только на `db_nodes` для аппаратной изоляции от приложения.
 - name: Setup Database Tier
   block:
     - name: Установка PostgreSQL и Redis
@@ -41,6 +45,8 @@
   when: "'db_nodes' in group_names"
 
 # --- KAFKA NODE ---
+# Зачем: Развернуть брокер сообщений для event-driven архитектуры (связь между ingest, normalizer, ledger).
+# Почему так: Вынесен на `kafka_nodes` с отдельным хранилищем (высокие требования к I/O). Запускается в современном KRaft mode (без внешнего Zookeeper).
 - name: Setup Kafka Tier
   block:
     - name: Установка Java
@@ -97,6 +103,8 @@
   when: "'kafka_nodes' in group_names"
 
 # --- ETCD NODE ---
+# Зачем: Надежное распределенное хранилище для Leader Election (чтобы worker-ы не обрабатывали одни и те же данные дважды).
+# Почему так: Разворачивается на выделенном `etcd_nodes` для изоляции от I/O-нагрузок баз данных.
 - name: Setup etcd Tier
   block:
     - name: Установка etcd-server

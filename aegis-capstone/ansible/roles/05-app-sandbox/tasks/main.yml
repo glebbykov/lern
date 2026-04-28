@@ -1,4 +1,6 @@
 ---
+# Зачем: Запускать приложение не от root.
+# Почему так: Снижает risk profile (privilege escalation) в случае взлома веб-приложения.
 - name: Создание системного пользователя aegis-svc
   user:
     name: aegis-svc
@@ -6,6 +8,8 @@
     shell: /usr/sbin/nologin
     create_home: no
 
+# Зачем: Подготовить место для деплоя кода (рабочая директория).
+# Почему так: /opt используется для непакетированного софта сторонних разработчиков (наше приложение).
 - name: Создание директории для приложения
   file:
     path: /opt/aegis-app
@@ -13,6 +17,8 @@
     owner: aegis-svc
     group: aegis-svc
 
+# Зачем: Разместить исходный код заглушки (прототипа) приложения.
+# Почему так: Пока нет CI/CD pipeline, деплоим простой python-скрипт прямо через Ansible.
 - name: Деплой кода приложения
   copy:
     dest: /opt/aegis-app/app.py
@@ -27,6 +33,8 @@
     owner: aegis-svc
     group: aegis-svc
 
+# Зачем: Управлять жизненным циклом приложения и жестко ограничить его возможности (sandbox).
+# Почему так: Systemd обладает мощными встроенными механизмами sandboxing'а (ProtectSystem, SystemCallFilter), делающими контейнеры необязательными для простых сервисов.
 - name: Создание systemd сервиса с Харденингом (Песочница)
   copy:
     dest: /etc/systemd/system/aegis-app.service
@@ -55,6 +63,8 @@
       WantedBy=multi-user.target
   notify: restart aegis-app
 
+# Зачем: Ввести сервис в строй.
+# Почему так: daemon_reload нужен, так как мы только что создали новый unit-файл.
 - name: Запуск и включение aegis-app сервиса
   systemd:
     name: aegis-app

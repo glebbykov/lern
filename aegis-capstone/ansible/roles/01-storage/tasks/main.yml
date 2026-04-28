@@ -1,10 +1,14 @@
 ---
+# Зачем: Облачные образы не включают нужные ФС-утилиты по умолчанию.
+# Почему так: LVM нужен для гибкой разметки, XFS - лучшая ФС для Mongo/Kafka (требование/рекомендация вендора).
 - name: Установка зависимостей хранилища
   apt:
     name: [lvm2, xfsprogs]
     state: present
     update_cache: yes
 
+# Зачем: В Azure диски могут прикрепляться на лету и не сразу появиться в ОС.
+# Почему так: Форсированный рескан SCSI шины гарантирует, что Ansible увидит `/dev/sdX` перед созданием LVM/RAID.
 - name: Рескан SCSI шины для обнаружения новых дисков Azure
   shell: |
     for host in /sys/class/scsi_host/*; do echo "- - -" > $host/scan; done
@@ -12,12 +16,16 @@
     executable: /bin/bash
   changed_when: false
 
+# Зачем: Зависимость для создания software RAID (используется для бэкап-узла).
+# Почему так: Устанавливается условно (только если есть список `aegis_raid_devices`), чтобы не засорять остальные узлы.
 - name: Установка mdadm для RAID
   apt:
     name: mdadm
     state: present
   when: aegis_raid_devices | default([]) | length > 0
 
+# Зачем: Обеспечить отказоустойчивое хранилище (RAID 5) для архивов и бэкапов.
+# Почему так: `creates: /dev/md0` обеспечивает идемпотентность (не пересоздает массив, если он уже есть).
 - name: Создание RAID 5 массива
   command: >-
     mdadm --create --verbose /dev/md0
@@ -30,6 +38,8 @@
   when: aegis_raid_devices | default([]) | length >= 3
   notify: update initramfs
 
+# Зачем: Ядро при загрузке должно знать, из каких дисков собирать RAID, чтобы примонтировать его.
+# Почему так: UUID фиксирует массив, иначе изменение порядка дисков при ребуте развалит RAID.
 - name: Сохранение конфигурации RAID
   shell: mdadm --detail --scan >> /etc/mdadm/mdadm.conf
   args:
@@ -40,6 +50,8 @@
   # Не используем creates, так как мы хотим убедиться что запись там есть. 
   # В идеале использовать lineinfile или template, но mdadm --scan надежнее для генерации строки.
 
+# Зачем: Изолировать I/O для каждой базы данных (PostgreSQL, Mongo, Redis).
+# Почему так: LVM дает возможность онлайн-расширения (`vgextend`, `lvextend`) и создания снапшотов.
 - name: Создание Volume Group на каждом выделенном диске
   community.general.lvg:
     vg: "vg_{{ item.name }}"
@@ -48,6 +60,8 @@
   loop_control:
     label: "{{ item.name }} → {{ item.dev }}"
 
+# Зачем: Утилизировать 100% выделенного диска под конкретную базу данных.
+# Почему так: `ignore_errors: yes` подавляет баг модуля `lvol`, который иногда падает при попытке расширить уже полный том.
 - name: Создание Logical Volume (100%FREE)
   community.general.lvol:
     vg: "vg_{{ item.name }}"
@@ -58,6 +72,8 @@
     label: "lv_{{ item.name }}"
   ignore_errors: yes
 
+# Зачем: Подготовить логические тома к записи данных.
+# Почему так: Тип ФС (ext4/xfs) задается динамически через host_vars в зависимости от профиля I/O базы.
 - name: Форматирование тома в целевой ФС
   filesystem:
     fstype: "{{ item.fs }}"
@@ -66,6 +82,8 @@
   loop_control:
     label: "{{ item.fs }} on lv_{{ item.name }}"
 
+# Зачем: Точка монтирования должна существовать до вызова `mount`, иначе он упадет.
+# Почему так: Вынесено в отдельный task для надежности.
 - name: Создание точки монтирования
   file:
     path: "{{ item.mount }}"
@@ -74,6 +92,8 @@
   loop_control:
     label: "{{ item.mount }}"
 
+# Зачем: Подключить диски к файловой системе ОС.
+# Почему так: `state: mounted` не только монтирует сейчас, но и прописывает в `/etc/fstab` для авто-монтирования при загрузке.
 - name: Монтирование (с записью в fstab)
   mount:
     path: "{{ item.mount }}"

@@ -224,11 +224,11 @@ sequenceDiagram
 ### Phase 0 — Hygiene (инфра)
 Цель: чистый старт, без блокеров от прошлой работы.
 
-- [ ] Удалить `terraform/generate_tf.py` (см. [ADR-0005](adr/0005-remove-generate-tf-py.md)).
-- [ ] Удалить мусорные директории `terraform/${path.module}/`, `terraform/${var.ansible_host_vars_dir}/`.
-- [ ] Принять решение по [ADR-0006](adr/0006-r2-r3-peering.md), реализовать.
-- [ ] Достроить `ansible/site.yml` чтобы прогонял все 8 ролей.
-- [ ] Зелёный прогон `terraform apply` + `ansible-playbook` end-to-end.
+- [x] Удалить `terraform/generate_tf.py` (см. [ADR-0005](adr/0005-remove-generate-tf-py.md)).
+- [x] Удалить мусорные директории `terraform/${path.module}/`, `terraform/${var.ansible_host_vars_dir}/`.
+- [x] Принять решение по [ADR-0006](adr/0006-r2-r3-peering.md), реализовать.
+- [x] Достроить `ansible/site.yml` чтобы прогонял все 8 ролей.
+- [x] Зелёный прогон `terraform apply` + `ansible-playbook` end-to-end.
 
 **Done when:** `make deploy` или эквивалент работает с нуля за 15 минут, все 5 узлов настроены, WG mesh поднят, Grafana доступна.
 

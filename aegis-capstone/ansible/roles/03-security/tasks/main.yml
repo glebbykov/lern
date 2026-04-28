@@ -1,4 +1,6 @@
 ---
+# Зачем: Базовая защита узла и аудит критических системных файлов.
+# Почему так: UFW предоставляет простой интерфейс над iptables, Auditd нужен для compliance (логирование доступа к /etc/shadow).
 - name: Установка UFW и Auditd
   apt:
     name:
@@ -6,12 +8,16 @@
       - auditd
     state: present
 
+# Зачем: Не потерять доступ к серверу после включения файрвола.
+# Почему так: TCP 22 открыт глобально, так как доступ к узлу ограничен снаружи через NSG в Azure.
 - name: Разрешение входящего SSH в UFW
   ufw:
     rule: allow
     port: '22'
     proto: tcp
 
+# Зачем: Разрешить прием внешнего веб-трафика на Ingress-ноде.
+# Почему так: Ограничено только группой `app_nodes` (наш load balancer).
 - name: HTTP/HTTPS ingress на app-node
   ufw:
     rule: allow
@@ -20,6 +26,8 @@
   loop: ['80', '443']
   when: "'app_nodes' in group_names"
 
+# Зачем: Разрешить взаимодействие баз данных между собой и с приложением (reconciliation API).
+# Почему так: Применяется строго на `db_nodes`, блокируя доступ извне.
 - name: East-west порты БД (Postgres / MongoDB / Redis)
   ufw:
     rule: allow
@@ -28,6 +36,8 @@
   loop: ['5432', '27017', '6379']
   when: "'db_nodes' in group_names"
 
+# Зачем: etcd требует порты для клиентского API (2379) и общения пиров (2380).
+# Почему так: Изолировано только для `etcd_nodes`.
 - name: East-west порты etcd
   ufw:
     rule: allow
@@ -36,6 +46,8 @@
   loop: ['2379', '2380']
   when: "'etcd_nodes' in group_names"
 
+# Зачем: Kafka-клиенты (9092) и внутренний контроллер KRaft (9093) должны общаться по сети.
+# Почему так: Открывается только на узлах брокеров Kafka.
 - name: Kafka broker / controller
   ufw:
     rule: allow
@@ -44,6 +56,8 @@
   loop: ['9092', '9093']
   when: "'kafka_nodes' in group_names"
 
+# Зачем: Доступ к метрикам и дашбордам мониторинга.
+# Почему так: Порты VictoriaMetrics и Grafana открыты только на `monitor_nodes` (az-app).
 - name: VictoriaMetrics + Grafana UI
   ufw:
     rule: allow
@@ -52,23 +66,31 @@
   loop: ['8428', '3000']
   when: "'monitor_nodes' in group_names"
 
+# Зачем: Prometheus (или VictoriaMetrics) должен собирать метрики ОС со всех машин.
+# Почему так: Порт 9100 разрешен повсеместно, но в реальном проде трафик пойдет через overlay-сеть.
 - name: node_exporter скрейп (внутри overlay)
   ufw:
     rule: allow
     port: '9100'
     proto: tcp
 
+# Зачем: Разрешить UDP трафик для построения зашифрованного Zero-Trust туннеля между всеми узлами.
+# Почему так: WireGuard использует порт 51820 по умолчанию.
 - name: WireGuard (mesh)
   ufw:
     rule: allow
     port: '51820'
     proto: udp
 
+# Зачем: Заблокировать весь неразрешенный трафик.
+# Почему так: Включается после того, как SSH и WG уже разрешены, чтобы не отрезать себя от сервера (Default Deny).
 - name: Включение UFW (Default Deny)
   ufw:
     state: enabled
     policy: deny
 
+# Зачем: Защита от brute-force атак на SSH.
+# Почему так: Доступ разрешен только по SSH-ключам (PasswordAuthentication no) и запрещен для root напрямую.
 - name: Харденинг SSHD (Запрет root и паролей)
   lineinfile:
     path: /etc/ssh/sshd_config
@@ -80,6 +102,8 @@
     - { regexp: '^#?PasswordAuthentication', line: 'PasswordAuthentication no' }
   notify: restart sshd
 
+# Зачем: Базовый Security Compliance.
+# Почему так: Отслеживает любые изменения в правах доступа (sudoers) и системных логах.
 - name: Настройка правил аудита (Auditd)
   copy:
     dest: /etc/audit/rules.d/aegis.rules

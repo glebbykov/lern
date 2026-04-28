@@ -1,29 +1,41 @@
 ---
+# Зачем: Подтвердить подлинность пакетов Docker/Containerd при скачивании.
+# Почему так: Стандартная практика apt для добавления сторонних репозиториев.
 - name: Добавление ключа Docker/Containerd
   apt_key:
     url: https://download.docker.com/linux/ubuntu/gpg
     state: present
 
+# Зачем: Скачать свежую стабильную версию Containerd, которой может не быть в стандартном репо Ubuntu.
+# Почему так: Используется официальный репозиторий Docker.
 - name: Добавление репозитория Docker/Containerd
   apt_repository:
     repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
     state: present
 
+# Зачем: Базовый runtime для запуска контейнеров будущего Kubernetes и изолированных сервисов (App Sandbox).
+# Почему так: Containerd легче и современнее, чем полный Docker Engine (dockerd).
 - name: Установка containerd
   apt:
     name: containerd.io
     state: present
 
+# Зачем: Сгенерировать полный конфиг со всеми параметрами, чтобы потом изменить нужный.
+# Почему так: `changed_when: false` не портит статистику Ansible (это read-only операция).
 - name: Генерация дефолтного конфига containerd
   command: containerd config default
   register: containerd_config
   changed_when: false
 
+# Зачем: Сохранить сгенерированный шаблон в файл настроек.
+# Почему так: Перезаписывает дефолтный пустой или старый конфиг.
 - name: Сохранение конфига containerd
   copy:
     dest: /etc/containerd/config.toml
     content: "{{ containerd_config.stdout }}"
 
+# Зачем: Требование Kubernetes (kubelet) — оба компонента (systemd и containerd) должны использовать один и тот же cgroup manager.
+# Почему так: Иначе возникнут утечки ресурсов и нестабильность контейнеров из-за двух разных контроллеров cgroup.
 - name: Включение SystemdCgroup в конфиге containerd
   replace:
     path: /etc/containerd/config.toml

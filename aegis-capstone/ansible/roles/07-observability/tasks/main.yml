@@ -1,10 +1,14 @@
 ---
+# Зачем: Запускать демоны мониторинга не от root.
+# Почему так: Standard security practice (Principle of Least Privilege).
 - name: Создание пользователя для VictoriaMetrics и Prometheus
   user:
     name: prometheus
     system: yes
     shell: /bin/false
 
+# Зачем: Централизованный сбор метрик (TSDB).
+# Почему так: VictoriaMetrics совместима с Prometheus API, но потребляет в разы меньше RAM и CPU.
 - name: Скачивание VictoriaMetrics (Экономичная альтернатива Prometheus)
   unarchive:
     src: https://github.com/VictoriaMetrics/VictoriaMetrics/releases/download/v1.97.1/victoria-metrics-linux-amd64-v1.97.1.tar.gz
@@ -12,6 +16,8 @@
     remote_src: yes
   when: "'monitor_nodes' in group_names"
 
+# Зачем: Обеспечить автозапуск и фоновую работу TSDB.
+# Почему так: Данные хранятся на /var/lib/..., retentionPeriod установлен в 1 месяц для экономии места.
 - name: Настройка Systemd сервиса для VictoriaMetrics
   copy:
     dest: /etc/systemd/system/victoriametrics.service
@@ -30,12 +36,16 @@
       WantedBy=multi-user.target
   when: "'monitor_nodes' in group_names"
 
+# Зачем: Grafana требует HTTPS-репозиторий.
+# Почему так: Стандартные утилиты Debian/Ubuntu для работы с внешними репо.
 - name: Зависимости apt для Grafana repo
   apt:
     name: [apt-transport-https, gnupg, software-properties-common]
     state: present
   when: "'monitor_nodes' in group_names"
 
+# Зачем: Подтвердить подлинность пакетов Grafana.
+# Почему так: Security best practice.
 - name: GPG ключ Grafana
   get_url:
     url: https://apt.grafana.com/gpg.key
@@ -43,6 +53,8 @@
     mode: '0644'
   when: "'monitor_nodes' in group_names"
 
+# Зачем: Добавить источник для установки Grafana.
+# Почему так: OSS версия (stable) достаточна для наших нужд.
 - name: Apt репозиторий Grafana (stable)
   apt_repository:
     repo: "deb [signed-by=/etc/apt/trusted.gpg.d/grafana.asc] https://apt.grafana.com stable main"
@@ -50,6 +62,8 @@
     filename: grafana
   when: "'monitor_nodes' in group_names"
 
+# Зачем: Инструмент для визуализации метрик (дашборды).
+# Почему так: Устанавливается через apt для легкого обновления в будущем.
 - name: Установка Grafana
   apt:
     name: grafana
@@ -57,6 +71,8 @@
     update_cache: yes
   when: "'monitor_nodes' in group_names"
 
+# Зачем: Поднять web-интерфейс Grafana.
+# Почему так: enabled=yes гарантирует старт после ребута.
 - name: Запуск Grafana
   systemd:
     name: grafana-server
@@ -64,12 +80,16 @@
     enabled: yes
   when: "'monitor_nodes' in group_names"
 
+# Зачем: Экспортировать метрики CPU/RAM/Disk со всех машин кластера.
+# Почему так: Устанавливается через бинарник, так как версия в apt часто устаревшая.
 - name: Установка Node Exporter на все машины
   unarchive:
     src: https://github.com/prometheus/node_exporter/releases/download/v1.7.0/node_exporter-1.7.0.linux-amd64.tar.gz
     dest: /tmp/
     remote_src: yes
 
+# Зачем: Положить бинарник в системный PATH.
+# Почему так: /usr/local/bin стандартное место для ручных инсталляций.
 - name: Перемещение бинарника Node Exporter
   copy:
     src: /tmp/node_exporter-1.7.0.linux-amd64/node_exporter
@@ -77,6 +97,8 @@
     remote_src: yes
     mode: '0755'
 
+# Зачем: Управление демоном через systemd.
+# Почему так: Запускаем от непривилегированного пользователя prometheus.
 - name: Настройка Systemd сервиса для Node Exporter
   copy:
     dest: /etc/systemd/system/node_exporter.service
@@ -93,6 +115,8 @@
       [Install]
       WantedBy=multi-user.target
 
+# Зачем: Активировать сбор метрик.
+# Почему так: daemon_reload=yes подхватывает только что созданный unit-файл.
 - name: Запуск Node Exporter
   systemd:
     name: node_exporter

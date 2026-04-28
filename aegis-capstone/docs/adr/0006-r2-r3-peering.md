@@ -11,7 +11,7 @@ related:
 # ADR-0006: Связность r2↔r3 — peering vs hub-and-spoke
 
 ## Status
-**Open** (требует решения, см. [Decision pending](#decision-pending)).
+**Accepted** (реализовано через Вариант A).
 
 ## Context
 В `terraform/azure.tf` сейчас есть VNet peering `r1↔r2` (`p12`/`p21`) и `r1↔r3` (`p13`/`p31`), но **нет** `r2↔r3`.
