@@ -1,183 +1,106 @@
-# =============================================================================
-# GCP: kafka-node (KRaft, RAID5 on 3 PDs) + monitor-node (VictoriaMetrics)
-# =============================================================================
+
+provider "google" {
+  project = var.gcp_project_id
+}
+
+resource "google_compute_network" "vpc" {
+  name                    = "gcp-vpc"
+  auto_create_subnetworks = false
+}
+
+resource "google_compute_subnetwork" "sub1" {
+  name          = "gcp-sub1"
+  network       = google_compute_network.vpc.id
+  ip_cidr_range = "10.20.1.0/24"
+  region        = var.gcp_region_1
+}
+
+resource "google_compute_subnetwork" "sub2" {
+  name          = "gcp-sub2"
+  network       = google_compute_network.vpc.id
+  ip_cidr_range = "10.21.1.0/24"
+  region        = var.gcp_region_2
+}
+
+resource "google_compute_firewall" "ssh" {
+  name          = "gcp-fw-ssh"
+  network       = google_compute_network.vpc.id
+  source_ranges = [var.operator_ip]
+  allow {
+    protocol = "tcp"
+    ports    = ["22"]
+  }
+}
+
+resource "google_compute_firewall" "internal" {
+  name          = "gcp-fw-internal"
+  network       = google_compute_network.vpc.id
+  source_ranges = ["10.0.0.0/8"]
+  allow {
+    protocol = "tcp"
+  }
+  allow {
+    protocol = "udp"
+  }
+  allow {
+    protocol = "icmp"
+  }
+}
 
 locals {
-  gcp_prefix = "${var.project_name}-gcp"
-
-  # GCE attached PDs are exposed as /dev/disk/by-id/google-<device-name>.
-  # We use stable by-id paths instead of /dev/sdX so attach order doesn't matter.
-  gcp_kafka_disks = ["k0", "k1", "k2"] # → /dev/disk/by-id/google-k0..k2 (assembled into RAID 5)
-}
-
-# ---------- Networking ----------
-resource "google_compute_network" "this" {
-  name                            = "${local.gcp_prefix}-vpc"
-  auto_create_subnetworks         = false
-  delete_default_routes_on_create = false
-  routing_mode                    = "REGIONAL"
-}
-
-resource "google_compute_subnetwork" "this" {
-  name          = "${local.gcp_prefix}-subnet"
-  ip_cidr_range = "10.20.1.0/24"
-  region        = var.gcp_region
-  network       = google_compute_network.this.id
-}
-
-# ---------- Firewall ----------
-resource "google_compute_firewall" "internal" {
-  name      = "${local.gcp_prefix}-fw-internal"
-  network   = google_compute_network.this.name
-  direction = "INGRESS"
-  priority  = 100
-
-  source_ranges = ["10.20.0.0/16", "10.10.0.0/16"] # gcp subnet + azure vnet (for future VPN/wireguard)
-  allow {
-    protocol = "tcp"
-    ports    = ["0-65535"]
+  gcp_vms = {
+    app     = { zone = var.gcp_zone_1, sub = google_compute_subnetwork.sub1.id, pip = true, disks = { monitor = 16 } }
+    db      = { zone = var.gcp_zone_1, sub = google_compute_subnetwork.sub1.id, pip = false, disks = { pgsql = 16, mongo = 16, redis = 16 } }
+    kafka   = { zone = var.gcp_zone_2, sub = google_compute_subnetwork.sub2.id, pip = false, disks = { jbod0 = 16, jbod1 = 16, etcd = 16 } }
+    storage = { zone = var.gcp_zone_2, sub = google_compute_subnetwork.sub2.id, pip = false, disks = { raid0 = 16, raid1 = 16, raid2 = 16 } }
   }
-  allow {
-    protocol = "udp"
-    ports    = ["0-65535"]
-  }
-  allow { protocol = "icmp" }
+  gcp_disks_flat = flatten([
+    for vm_k, vm_v in local.gcp_vms : [
+      for d_k, d_v in vm_v.disks : {
+        vm   = vm_k
+        disk = d_k
+        size = d_v
+        zone = vm_v.zone
+      }
+    ]
+  ])
 }
 
-resource "google_compute_firewall" "ssh_from_operator" {
-  count     = var.gcp_expose_ssh_publicly ? 1 : 0
-  name      = "${local.gcp_prefix}-fw-ssh-operator"
-  network   = google_compute_network.this.name
-  direction = "INGRESS"
-  priority  = 200
-
-  source_ranges = [var.operator_ip]
-  allow {
-    protocol = "tcp"
-    ports    = ["22"]
-  }
-}
-
-resource "google_compute_firewall" "ssh_from_azure_bastion" {
-  name      = "${local.gcp_prefix}-fw-ssh-bastion"
-  network   = google_compute_network.this.name
-  direction = "INGRESS"
-  priority  = 210
-
-  source_ranges = ["${azurerm_public_ip.bastion.ip_address}/32"]
-  allow {
-    protocol = "tcp"
-    ports    = ["22"]
-  }
-}
-
-resource "google_compute_firewall" "monitor_ui" {
-  name      = "${local.gcp_prefix}-fw-monitor"
-  network   = google_compute_network.this.name
-  direction = "INGRESS"
-  priority  = 300
-
-  source_ranges = [var.operator_ip]
-  target_tags   = ["monitor"]
-  allow {
-    protocol = "tcp"
-    ports    = ["3000", "8428"] # Grafana, VictoriaMetrics
-  }
-}
-
-resource "google_compute_firewall" "wireguard" {
-  name      = "${local.gcp_prefix}-fw-wireguard"
-  network   = google_compute_network.this.name
-  direction = "INGRESS"
-  priority  = 220
-
-  source_ranges = ["${azurerm_public_ip.bastion.ip_address}/32"]
-  allow {
-    protocol = "udp"
-    ports    = ["51820"]
-  }
-}
-
-# ---------- Persistent Disks ----------
-resource "google_compute_disk" "kafka_data" {
-  for_each = toset(local.gcp_kafka_disks)
-  name     = "${local.gcp_prefix}-kafka-${each.key}"
+resource "google_compute_disk" "disks" {
+  for_each = { for d in local.gcp_disks_flat : "${d.vm}-${d.disk}" => d }
+  name     = "gcp-${each.key}"
   type     = "pd-ssd"
-  zone     = var.gcp_zone
-  size     = 16
+  zone     = each.value.zone
+  size     = each.value.size
 }
 
-resource "google_compute_disk" "monitor_data" {
-  name = "${local.gcp_prefix}-monitor-data"
-  type = "pd-ssd"
-  zone = var.gcp_zone
-  size = 32
-}
-
-# ---------- Instances ----------
-resource "google_compute_instance" "kafka" {
-  name         = "${local.gcp_prefix}-kafka"
+resource "google_compute_instance" "vms" {
+  for_each     = local.gcp_vms
+  name         = "gcp-${each.key}"
   machine_type = var.gcp_machine_type
-  zone         = var.gcp_zone
-  tags         = ["kafka", "stateful"]
+  zone         = each.value.zone
 
   boot_disk {
     initialize_params {
       image = "ubuntu-os-cloud/ubuntu-2204-lts"
       size  = 20
       type  = "pd-balanced"
+    }
+  }
+
+  network_interface {
+    subnetwork = each.value.sub
+    dynamic "access_config" {
+      for_each = each.value.pip ? [1] : []
+      content {}
     }
   }
 
   dynamic "attached_disk" {
-    for_each = google_compute_disk.kafka_data
+    for_each = each.value.disks
     content {
-      source      = attached_disk.value.id
-      device_name = attached_disk.key # exposes as /dev/disk/by-id/google-<key>
-    }
-  }
-
-  network_interface {
-    network    = google_compute_network.this.id
-    subnetwork = google_compute_subnetwork.this.id
-
-    dynamic "access_config" {
-      for_each = var.gcp_expose_ssh_publicly ? [1] : []
-      content {}
-    }
-  }
-
-  metadata = {
-    ssh-keys = "${var.vm_admin_user}:${file(pathexpand(var.ssh_public_key_path))}"
-  }
-}
-
-resource "google_compute_instance" "monitor" {
-  name         = "${local.gcp_prefix}-monitor"
-  machine_type = var.gcp_machine_type
-  zone         = var.gcp_zone
-  tags         = ["monitor"]
-
-  boot_disk {
-    initialize_params {
-      image = "ubuntu-os-cloud/ubuntu-2204-lts"
-      size  = 20
-      type  = "pd-balanced"
-    }
-  }
-
-  attached_disk {
-    source      = google_compute_disk.monitor_data.id
-    device_name = "m0"
-  }
-
-  network_interface {
-    network    = google_compute_network.this.id
-    subnetwork = google_compute_subnetwork.this.id
-
-    dynamic "access_config" {
-      for_each = var.gcp_expose_ssh_publicly ? [1] : []
-      content {}
+      source      = google_compute_disk.disks["${each.key}-${attached_disk.key}"].id
+      device_name = attached_disk.key
     }
   }
 

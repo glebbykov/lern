@@ -5,3 +5,8 @@ terraform.tfvars
 *.tfstate.backup
 .generated/
 crash.log
+*.backup
+.generated/
+*.ini
+host_vars/
+
