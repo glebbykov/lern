@@ -137,27 +137,11 @@ resource "azurerm_network_security_group" "nsg1" {
   }
 }
 
-resource "azurerm_network_security_group" "nsg2" {
-  name                = "nsg2"
-  location            = azurerm_resource_group.r2.location
-  resource_group_name = azurerm_resource_group.r2.name
-  security_rule {
-    name                       = "internal"
-    priority                   = 110
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "*"
-    source_address_prefixes    = ["10.0.0.0/8"]
-    source_port_range          = "*"
-    destination_port_range     = "*"
-    destination_address_prefix = "*"
-  }
-}
-
-resource "azurerm_network_security_group" "nsg3" {
-  name                = "nsg3"
-  location            = azurerm_resource_group.r3.location
-  resource_group_name = azurerm_resource_group.r3.name
+resource "azurerm_network_security_group" "nsg_internal" {
+  for_each            = { r2 = azurerm_resource_group.r2, r3 = azurerm_resource_group.r3 }
+  name                = "nsg-${each.key}"
+  location            = each.value.location
+  resource_group_name = each.value.name
   security_rule {
     name                       = "internal"
     priority                   = 110
@@ -178,28 +162,29 @@ resource "azurerm_subnet_network_security_group_association" "a1" {
 
 resource "azurerm_subnet_network_security_group_association" "a2" {
   subnet_id                 = azurerm_subnet.s2.id
-  network_security_group_id = azurerm_network_security_group.nsg2.id
+  network_security_group_id = azurerm_network_security_group.nsg_internal["r2"].id
 }
 
 resource "azurerm_subnet_network_security_group_association" "a3" {
   subnet_id                 = azurerm_subnet.s3.id
-  network_security_group_id = azurerm_network_security_group.nsg3.id
+  network_security_group_id = azurerm_network_security_group.nsg_internal["r3"].id
 }
 
 locals {
   az_vms = {
-    app     = { rg = azurerm_resource_group.r1, sub = azurerm_subnet.s1.id, pip = azurerm_public_ip.app.id, disks = { monitor = 0 } }
-    db      = { rg = azurerm_resource_group.r1, sub = azurerm_subnet.s1.id, pip = null, disks = { pgsql = 0, mongo = 1, redis = 2 } }
-    kafka   = { rg = azurerm_resource_group.r2, sub = azurerm_subnet.s2.id, pip = null, disks = { jbod0 = 0, jbod1 = 1 } }
-    etcd    = { rg = azurerm_resource_group.r2, sub = azurerm_subnet.s2.id, pip = null, disks = { etcd = 0 } }
-    storage = { rg = azurerm_resource_group.r3, sub = azurerm_subnet.s3.id, pip = null, disks = { raid0 = 0, raid1 = 1, raid2 = 2 } }
+    app     = { rg = azurerm_resource_group.r1, sub = azurerm_subnet.s1.id, pip = azurerm_public_ip.app.id, disks = { monitor = { lun = 0, size = 16 } } }
+    db      = { rg = azurerm_resource_group.r1, sub = azurerm_subnet.s1.id, pip = null, disks = { pgsql = { lun = 0, size = 16 }, mongo = { lun = 1, size = 16 }, redis = { lun = 2, size = 16 } } }
+    kafka   = { rg = azurerm_resource_group.r2, sub = azurerm_subnet.s2.id, pip = null, disks = { jbod0 = { lun = 0, size = 16 }, jbod1 = { lun = 1, size = 16 } } }
+    etcd    = { rg = azurerm_resource_group.r2, sub = azurerm_subnet.s2.id, pip = null, disks = { etcd = { lun = 0, size = 16 } } }
+    storage = { rg = azurerm_resource_group.r3, sub = azurerm_subnet.s3.id, pip = null, disks = { raid0 = { lun = 0, size = 16 }, raid1 = { lun = 1, size = 16 }, raid2 = { lun = 2, size = 16 } } }
   }
   az_disks_flat = flatten([
     for vm_k, vm_v in local.az_vms : [
       for d_k, d_v in vm_v.disks : {
         vm   = vm_k
         disk = d_k
-        lun  = d_v
+        lun  = d_v.lun
+        size = d_v.size
         rg   = vm_v.rg
       }
     ]
@@ -211,6 +196,7 @@ resource "azurerm_network_interface" "nics" {
   name                = "nic-${each.key}"
   location            = each.value.rg.location
   resource_group_name = each.value.rg.name
+
   ip_configuration {
     name                          = "internal"
     subnet_id                     = each.value.sub
@@ -228,14 +214,17 @@ resource "azurerm_linux_virtual_machine" "vms" {
   admin_username                  = var.vm_admin_user
   disable_password_authentication = true
   network_interface_ids           = [azurerm_network_interface.nics[each.key].id]
+
   admin_ssh_key {
     username   = var.vm_admin_user
     public_key = file(pathexpand(var.ssh_public_key_path))
   }
+
   os_disk {
     caching              = "ReadWrite"
     storage_account_type = "Premium_LRS"
   }
+
   source_image_reference {
     offer     = "0001-com-ubuntu-server-jammy"
     publisher = "Canonical"
@@ -251,7 +240,7 @@ resource "azurerm_managed_disk" "disks" {
   resource_group_name  = each.value.rg.name
   storage_account_type = "Premium_LRS"
   create_option        = "Empty"
-  disk_size_gb         = 16
+  disk_size_gb         = each.value.size
 }
 
 resource "azurerm_virtual_machine_data_disk_attachment" "atts" {
