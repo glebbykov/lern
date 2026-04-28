@@ -1,90 +1,81 @@
-# 🛡️ Project Aegis: Distributed Zero-Trust Infrastructure
+# 🛡️ Project Aegis: B2B Reconciliation & Ledger Platform
 
-## 📖 Легенда (Business Case)
-Вы — Lead Infrastructure Engineer в стартапе **"Aegis Pay"**. 
-По требованию архитектурного комитета инфраструктура должна быть **физически разделена на изолированные узлы** по типу нагрузки. 
+> **Статус:** Phase 0 (Infrastructure & Hygiene) завершена. Переходим к Phase 1 (Прототип приложения).
 
-**Важная ремарка:** Данная инфраструктура — это *монолитный фундамент* под будущий Kubernetes. Хотя `app-node` станет Control-Plane/Worker нодой K8s, базы данных (**Stateful Tier**) выносятся на классическое Bare-Metal/VM развертывание.
+Aegis — это B2B SaaS-платформа для fintech-компаний, предназначенная для нормализации транзакционных потоков, мэтчинга и ведения двойной записи (Double-entry Ledger). Подробное бизнес-обоснование и план развития описаны в [План продукта (PROJECT_PLAN.md)](docs/PROJECT_PLAN.md).
 
-### ❓ Почему мы не деплоим Базы Данных в Kubernetes? (Foreshadowing)
-В "Aegis Pay" мы следуем Enterprise-стандартам:
-1. **Предсказуемый I/O и Изоляция (Noisy Neighbors):** Базы данных требуют монопольного доступа к кэшам CPU и RAM. В K8s планировщик может посадить рядом "шумный" под, который вызовет нестабильные задержки (latency spikes) в базе.
-2. **Тюнинг ядра невозможен в подах:** СУБД требуют жесткого изменения параметров ядра хоста (например, отключение Transparent Huge Pages для Redis/MongoDB или `vm.zone_reclaim_mode`). Сделать это "только для одного пода" в K8s невозможно — это ломает концепцию разделяемого ядра.
-3. **Storage I/O Оверхед:** Kubernetes CSI драйверы добавляют слой абстракции, который замедляет работу дисковой подсистемы. Мы же используем прямые блочные устройства.
+Этот репозиторий содержит **полностью автоматизированную инфраструктуру** для работы платформы, реализующую паттерны Enterprise-уровня.
 
 ---
 
-## 🏗 Архитектура и Топология Кластера (Best Practices)
+## 🏗 Архитектура Инфраструктуры
 
-Мы разворачиваем 4 изолированные виртуальные машины. Самое главное архитектурное решение кроется в подсистеме хранения данных.
+Мы используем гибридный подход: Ingress и Stateless сервисы работают в песочницах (future Kubernetes), а Stateful-слой (Базы данных и Message Brokers) вынесен на классическое ВМ-развертывание со строгой изоляцией дисковой подсистемы (LVM/RAID) и глубоким тюнингом ядра (BBR, THP, Page Cache).
 
-1. **`bastion` (DMZ):** Единственная точка входа по SSH (белый список IP).
-2. **`app-node` (Ingress & K8s Foundation):** Здесь работает `Nginx` (как L7 Ingress) и `Containerd` в Systemd-песочнице.
-3. **`kafka-node` (Message Broker):** Выделенный сервер под `Apache Kafka` (в режиме KRaft). К ней прикреплены 3 диска, собранные в **аппаратный RAID 5**, а хранилище отформатировано в **XFS**.
+- **Multi-Region:** Инфраструктура развернута в 3 регионах Azure.
+- **Zero-Trust Mesh:** Все 5 узлов общаются исключительно через зашифрованный **WireGuard** оверлей (`10.100.0.0/24`). Никакие порты баз данных не "смотрят" даже во внутреннюю VNet сеть.
+- **Observability:** VictoriaMetrics и Grafana развернуты из коробки для сбора системных метрик (`node_exporter`).
 
-### 💿 4. Строгая физическая изоляция I/O (`db-node`)
-**Идеальный Production:** В реальном мире с неограниченным бюджетом, PostgreSQL, MongoDB, Redis и etcd разворачиваются на **абсолютно разных виртуальных машинах (или кластерах)** для полной изоляции CPU и RAM.
-**Наш архитектурный компромисс (из-за квот облака):** Мы помещаем их на один мощный Compute-узел (`db-node`), **НО** мы строго изолируем их дисковую подсистему (Storage I/O).
-
-К серверу прикреплено **4 независимых физических диска** (Data LUNs). Каждая база данных получает свой собственный выделенный диск, обернутый в LVM:
-- `/dev/sdc` ➡️ **PostgreSQL** (`vg_pgsql`, ext4)
-- `/dev/sdd` ➡️ **MongoDB** (`vg_mongo`, XFS)
-- `/dev/sde` ➡️ **Redis** (`vg_redis`, ext4)
-- `/dev/sdf` ➡️ **etcd** (`vg_etcd`, ext4)
-
-*Почему это важно?* Это полностью исключает конкуренцию за IOPS (I/O Wait) между разными движками баз данных на уровне контроллера блочных устройств. Тяжелые операции записи в PostgreSQL никак не замедлят синхронизацию стейта кластера в `etcd`.
-
-### 🔥 Продвинутый Тюнинг Ядра (Ansible)
-Поскольку базы разнесены, мы применяем гранулярный тюнинг ядра на каждом узле:
-
-- **App Node (Nginx / Future K8s):** 
-  - Настройка **TCP BBR** для ускорения отдачи трафика.
-  - Расширение эфемерных портов (`net.ipv4.ip_local_port_range`).
-- **DB Node (PostgreSQL + MongoDB + Redis):**
-  - Отключение **Transparent Huge Pages (THP)** через systemd-oneshot юнит (Избавляет Redis и MongoDB от чудовищных утечек памяти и latency-спайков).
-  - Настройка `vm.dirty_background_ratio = 5` и `vm.dirty_ratio = 15`. Заставляет ядро плавно сбрасывать данные Postgres на диск.
-  - Настройка `vm.zone_reclaim_mode = 0`. Критически важная настройка для **MongoDB**, предотвращающая падение производительности на NUMA-архитектурах.
-- **Kafka Node:**
-  - Kafka невероятно сильно полагается на **Page Cache**.
-  - Настраиваем `vm.dirty_ratio = 60` — даем Кафке возможность держать больше данных в RAM перед сбросом на RAID 5.
+> 📚 **Техническая документация (SSOT)**
+> - [Топология и IP-адресация](docs/topology.md)
+> - [Каталог открытых портов](docs/ports.md)
+> - [Архитектурные решения (ADR)](docs/adr/README.md)
 
 ---
 
-## 📋 Инструкция по развертыванию
+## 🚀 Быстрый старт (Deployment)
 
-1. **Provisioning (Создание Облака):**
-   Выполните скрипт:
-   ```bash
-   ./provision/azure_create.sh
-   ```
-   Он создаст 4 виртуалки и выведет настройки для `~/.ssh/config`.
+Вся инфраструктура полностью управляется через IaC (Terraform + Ansible). Ручные операции запрещены.
 
-2. **Ansible Automation:**
-   Перейдите в директорию `ansible` и запустите плейбук.
-   ```bash
-   ansible-playbook -i inventory/hosts.ini site.yml
-   ```
+### 1. Поднятие облачных ресурсов (Terraform)
+Terraform создаст VNet, пиринги (Full Mesh) и 5 виртуальных машин с нужным количеством дисков.
+```bash
+cd terraform
+terraform init
+terraform apply -auto-approve
+```
 
-Это финальная точка кристаллизации ваших знаний: от сетей и дисков до тюнинга ядра и автоматизации. Идеальный проект для GitHub и резюме!
+### 2. Конфигурация узлов (Ansible)
+Ansible раскатает LVM/RAID, настроит ядро, поднимет WireGuard mesh и установит все базы данных (PostgreSQL, MongoDB, Redis, Kafka, etcd).
+```bash
+cd ../ansible
+ansible-galaxy collection install community.general
+ansible-playbook -i inventory/hosts.ini site.yml
+```
 
 ---
 
-## 🚀 Roadmap: Путь к идеальному Production (SRE Vision)
+## 🔑 Доступ к серверам (Bastion SSH)
 
-Текущая архитектура закладывает идеальный фундамент ОС и железа. Для эволюции проекта до уровня Mission-Critical (отказоустойчивость 99.99%) запланированы следующие этапы:
+Публичный IP есть **только у балансировщика (`az-app`)**. Все остальные серверы скрыты за NAT. Доступ к ним осуществляется через `ProxyJump` (`-J`). 
 
-1. **Миграция на Terraform (Декларативный IaC):** Отказ от императивных bash-скриптов (`azure_create.sh`) в пользу Terraform State. Это позволит безопасно версионировать изменения облачной инфраструктуры и интегрировать их в CI/CD (GitOps).
-2. **Observability Stack (Наблюдаемость):** Управление ядром без метрик — это полет вслепую. Планируется развертывание `Prometheus` + `Node Exporter` + `Grafana` для визуализации эффекта от тюнинга (I/O wait, TCP retransmits, Page Cache hits).
-3. **High Availability (Устранение SPOF):** Текущий узел баз данных является единой точкой отказа. В будущем базы будут распределены: PostgreSQL через `Patroni` (авто-failover), MongoDB через `Replica Set`, а Kafka растянута на 3 брокера для кворума.
-4. **Disaster Recovery (Резервное копирование):** Внедрение `pgBackRest` / `WAL-G` для непрерывного архивирования (Point-in-Time Recovery) транзакций прямо в S3-хранилище Azure Blob.
-5. **Secrets Management:** Миграция управления паролями и сертификатами из переменных Ansible в `HashiCorp Vault` (или использование `SOPS` для шифрования).
+*IP бастиона подставьте из вывода `terraform output` (или посмотрите в Azure).*
 
-### 🗄️ 6. Backup & Disaster Recovery (BaaS & DR)
-**Проблема:** RAID-массивы защищают только от физической поломки дисков (Hardware Failure), но абсолютно бесполезны против логических ошибок (например, случайный `DROP DATABASE`, неудачная миграция) или атак вирусов-шифровальщиков. 
-**Решение (Современный DR-паттерн):**
-*   **Правило 3-2-1:** 3 копии данных, на 2-х разных физических носителях, 1 копия — вне офиса (в нашем случае — в другом облачном регионе или S3).
-*   **Технологии бэкапирования (BaaS):**
-    *   **PostgreSQL:** Использование **WAL-G** или **pgBackRest**. Эти утилиты не делают тяжелые полные дампы каждый час, а непрерывно отправляют логи транзакций (WAL) напрямую в объектное хранилище (Azure Blob Storage / AWS S3). Это позволяет восстановить базу на *любую секунду в прошлом* (Point-in-Time Recovery - PiTR).
-    *   **MongoDB:** Использование встроенной утилиты `mongodump` с отправкой архивов через `rclone` в S3-корзину, или использование MongoDB Ops Manager.
-    *   **etcd:** Автоматизированные snapshot-скрипты, сохраняющие стейт кластера перед любыми апгрейдами, с отправкой в S3.
-*   **Изоляция резервных копий:** Серверы баз данных имеют право *только писать* бэкапы в S3-бакет (Write-Only ключи доступа). В случае взлома базы данных, хакер не сможет удалить старые бэкапы из облака, так как у него нет ключей с правами `Delete`.
+**1. Доступ на бастион (az-app / Ingress / Monitoring):**
+```bash
+ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new ansible_user@<AZ_APP_PUBLIC_IP>
+```
+
+**2. Доступ к Базам Данных (az-db):**
+```bash
+ssh -i ~/.ssh/id_ed25519 -J ansible_user@<AZ_APP_PUBLIC_IP> -o StrictHostKeyChecking=accept-new ansible_user@10.10.1.5
+```
+
+**3. Доступ к Message Broker (az-kafka):**
+```bash
+ssh -i ~/.ssh/id_ed25519 -J ansible_user@<AZ_APP_PUBLIC_IP> -o StrictHostKeyChecking=accept-new ansible_user@10.11.1.4
+```
+
+**4. Доступ к Coordination (az-etcd):**
+```bash
+ssh -i ~/.ssh/id_ed25519 -J ansible_user@<AZ_APP_PUBLIC_IP> -o StrictHostKeyChecking=accept-new ansible_user@10.11.1.5
+```
+
+**5. Доступ к Archive/Backups (az-storage):**
+```bash
+ssh -i ~/.ssh/id_ed25519 -J ansible_user@<AZ_APP_PUBLIC_IP> -o StrictHostKeyChecking=accept-new ansible_user@10.12.1.4
+```
+
+> **Полезные UI интерфейсы (через SSH туннель к бастиону):**
+> - **Grafana:** `http://localhost:3000`
+> - **Aegis API (Sandbox):** `http://localhost:8080`
