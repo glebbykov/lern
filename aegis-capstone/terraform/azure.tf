@@ -18,6 +18,11 @@ resource "azurerm_resource_group" "r2" {
   location = var.azure_location_2
 }
 
+resource "azurerm_resource_group" "r3" {
+  name     = "${var.project_name}-az-r3"
+  location = var.azure_location_3
+}
+
 resource "azurerm_virtual_network" "v1" {
   name                = "vnet-r1"
   location            = azurerm_resource_group.r1.location
@@ -32,8 +37,15 @@ resource "azurerm_virtual_network" "v2" {
   address_space       = ["10.11.0.0/16"]
 }
 
-resource "azurerm_virtual_network_peering" "p1" {
-  name                         = "peer1"
+resource "azurerm_virtual_network" "v3" {
+  name                = "vnet-r3"
+  location            = azurerm_resource_group.r3.location
+  resource_group_name = azurerm_resource_group.r3.name
+  address_space       = ["10.12.0.0/16"]
+}
+
+resource "azurerm_virtual_network_peering" "p12" {
+  name                         = "p12"
   resource_group_name          = azurerm_resource_group.r1.name
   virtual_network_name         = azurerm_virtual_network.v1.name
   remote_virtual_network_id    = azurerm_virtual_network.v2.id
@@ -41,10 +53,28 @@ resource "azurerm_virtual_network_peering" "p1" {
   allow_forwarded_traffic      = true
 }
 
-resource "azurerm_virtual_network_peering" "p2" {
-  name                         = "peer2"
+resource "azurerm_virtual_network_peering" "p21" {
+  name                         = "p21"
   resource_group_name          = azurerm_resource_group.r2.name
   virtual_network_name         = azurerm_virtual_network.v2.name
+  remote_virtual_network_id    = azurerm_virtual_network.v1.id
+  allow_virtual_network_access = true
+  allow_forwarded_traffic      = true
+}
+
+resource "azurerm_virtual_network_peering" "p13" {
+  name                         = "p13"
+  resource_group_name          = azurerm_resource_group.r1.name
+  virtual_network_name         = azurerm_virtual_network.v1.name
+  remote_virtual_network_id    = azurerm_virtual_network.v3.id
+  allow_virtual_network_access = true
+  allow_forwarded_traffic      = true
+}
+
+resource "azurerm_virtual_network_peering" "p31" {
+  name                         = "p31"
+  resource_group_name          = azurerm_resource_group.r3.name
+  virtual_network_name         = azurerm_virtual_network.v3.name
   remote_virtual_network_id    = azurerm_virtual_network.v1.id
   allow_virtual_network_access = true
   allow_forwarded_traffic      = true
@@ -62,6 +92,13 @@ resource "azurerm_subnet" "s2" {
   resource_group_name  = azurerm_resource_group.r2.name
   virtual_network_name = azurerm_virtual_network.v2.name
   address_prefixes     = ["10.11.1.0/24"]
+}
+
+resource "azurerm_subnet" "s3" {
+  name                 = "sub3"
+  resource_group_name  = azurerm_resource_group.r3.name
+  virtual_network_name = azurerm_virtual_network.v3.name
+  address_prefixes     = ["10.12.1.0/24"]
 }
 
 resource "azurerm_public_ip" "app" {
@@ -93,7 +130,7 @@ resource "azurerm_network_security_group" "nsg1" {
     direction                  = "Inbound"
     access                     = "Allow"
     protocol                   = "*"
-    source_address_prefixes    = ["10.10.0.0/16", "10.11.0.0/16"]
+    source_address_prefixes    = ["10.0.0.0/8"]
     source_port_range          = "*"
     destination_port_range     = "*"
     destination_address_prefix = "*"
@@ -110,7 +147,24 @@ resource "azurerm_network_security_group" "nsg2" {
     direction                  = "Inbound"
     access                     = "Allow"
     protocol                   = "*"
-    source_address_prefixes    = ["10.10.0.0/16", "10.11.0.0/16"]
+    source_address_prefixes    = ["10.0.0.0/8"]
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    destination_address_prefix = "*"
+  }
+}
+
+resource "azurerm_network_security_group" "nsg3" {
+  name                = "nsg3"
+  location            = azurerm_resource_group.r3.location
+  resource_group_name = azurerm_resource_group.r3.name
+  security_rule {
+    name                       = "internal"
+    priority                   = 110
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "*"
+    source_address_prefixes    = ["10.0.0.0/8"]
     source_port_range          = "*"
     destination_port_range     = "*"
     destination_address_prefix = "*"
@@ -127,20 +181,25 @@ resource "azurerm_subnet_network_security_group_association" "a2" {
   network_security_group_id = azurerm_network_security_group.nsg2.id
 }
 
+resource "azurerm_subnet_network_security_group_association" "a3" {
+  subnet_id                 = azurerm_subnet.s3.id
+  network_security_group_id = azurerm_network_security_group.nsg3.id
+}
+
 locals {
   az_vms = {
-    app     = { rg = azurerm_resource_group.r1, sub = azurerm_subnet.s1.id, pip = azurerm_public_ip.app.id, disks = { monitor = { lun = 0, size = 16 } } }
-    db      = { rg = azurerm_resource_group.r1, sub = azurerm_subnet.s1.id, pip = null, disks = { pgsql = { lun = 0, size = 16 }, mongo = { lun = 1, size = 16 }, redis = { lun = 2, size = 16 } } }
-    kafka   = { rg = azurerm_resource_group.r2, sub = azurerm_subnet.s2.id, pip = null, disks = { jbod0 = { lun = 0, size = 16 }, jbod1 = { lun = 1, size = 16 }, etcd = { lun = 2, size = 16 } } }
-    storage = { rg = azurerm_resource_group.r2, sub = azurerm_subnet.s2.id, pip = null, disks = { raid0 = { lun = 0, size = 16 }, raid1 = { lun = 1, size = 16 }, raid2 = { lun = 2, size = 16 } } }
+    app     = { rg = azurerm_resource_group.r1, sub = azurerm_subnet.s1.id, pip = azurerm_public_ip.app.id, disks = { monitor = 0 } }
+    db      = { rg = azurerm_resource_group.r1, sub = azurerm_subnet.s1.id, pip = null, disks = { pgsql = 0, mongo = 1, redis = 2 } }
+    kafka   = { rg = azurerm_resource_group.r2, sub = azurerm_subnet.s2.id, pip = null, disks = { jbod0 = 0, jbod1 = 1 } }
+    etcd    = { rg = azurerm_resource_group.r2, sub = azurerm_subnet.s2.id, pip = null, disks = { etcd = 0 } }
+    storage = { rg = azurerm_resource_group.r3, sub = azurerm_subnet.s3.id, pip = null, disks = { raid0 = 0, raid1 = 1, raid2 = 2 } }
   }
   az_disks_flat = flatten([
     for vm_k, vm_v in local.az_vms : [
       for d_k, d_v in vm_v.disks : {
         vm   = vm_k
         disk = d_k
-        lun  = d_v.lun
-        size = d_v.size
+        lun  = d_v
         rg   = vm_v.rg
       }
     ]
@@ -192,7 +251,7 @@ resource "azurerm_managed_disk" "disks" {
   resource_group_name  = each.value.rg.name
   storage_account_type = "Premium_LRS"
   create_option        = "Empty"
-  disk_size_gb         = each.value.size
+  disk_size_gb         = 16
 }
 
 resource "azurerm_virtual_machine_data_disk_attachment" "atts" {

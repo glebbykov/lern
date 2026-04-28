@@ -51,7 +51,8 @@ locals {
   gcp_vms = {
     app     = { zone = var.gcp_zone_1, sub = google_compute_subnetwork.sub1.id, pip = true, disks = { monitor = 16 } }
     db      = { zone = var.gcp_zone_1, sub = google_compute_subnetwork.sub1.id, pip = false, disks = { pgsql = 16, mongo = 16, redis = 16 } }
-    kafka   = { zone = var.gcp_zone_2, sub = google_compute_subnetwork.sub2.id, pip = false, disks = { jbod0 = 16, jbod1 = 16, etcd = 16 } }
+    kafka   = { zone = var.gcp_zone_2, sub = google_compute_subnetwork.sub2.id, pip = false, disks = { jbod0 = 16, jbod1 = 16 } }
+    etcd    = { zone = var.gcp_zone_2, sub = google_compute_subnetwork.sub2.id, pip = false, disks = { etcd = 16 } }
     storage = { zone = var.gcp_zone_2, sub = google_compute_subnetwork.sub2.id, pip = false, disks = { raid0 = 16, raid1 = 16, raid2 = 16 } }
   }
   gcp_disks_flat = flatten([
