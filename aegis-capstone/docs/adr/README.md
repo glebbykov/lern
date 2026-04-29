@@ -16,7 +16,8 @@ last_verified: 2026-04-29
 | [0003](0003-multi-region-topology.md) | Разнесение узлов по 3 Azure регионам | Accepted |
 | [0004](0004-wireguard-mesh-zero-trust.md) | WireGuard full-mesh поверх VNet peering | Accepted |
 | [0005](0005-remove-generate-tf-py.md) | Удаление `generate_tf.py`, `*.tf` — единственный источник правды | Accepted |
-| [0006](0006-r2-r3-peering.md) | Связность r2↔r3 — добавить peering vs hub-and-spoke | Open |
+| [0006](0006-r2-r3-peering.md) | Связность r2↔r3 — добавить peering vs hub-and-spoke | Accepted |
+| [0007](0007-local-stateful-in-compose.md) | Локальный stateful tier в docker-compose до Phase 3 | Accepted |
 
 ## Правила
 

@@ -1,36 +1,54 @@
 """
-matcher — Phase 1 skeleton.
-Сравнивает входящие NormalizedTxn с ожидаемыми (по external_ref + amount).
-Сейчас — заглушка POST /v1/match, всегда возвращает matched=True.
+matcher — Phase 2.
+Простейший reconciliation: ожидаемые транзакции лежат в Redis под ключом
+expected:{tenant_id}:{external_ref} → JSON {amount_minor, currency, expires_at}.
+POST /v1/match сравнивает входящую с этой записью.
+
+Дополнительный POST /v1/expected — записать "ожидание" (для smoke-теста).
+
+Phase 3: REDIS_HOST → overlay-IP реального az-db (10.100.0.11).
 """
+import json
 import os
 import time
 import uuid
+from contextlib import asynccontextmanager
 from typing import Literal
 
+import redis.asyncio as redis
 from fastapi import FastAPI, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
 SERVICE_NAME = os.environ.get("SERVICE_NAME", "matcher")
-VERSION = os.environ.get("VERSION", "0.1.0")
+VERSION = os.environ.get("VERSION", "0.2.0")
+REDIS_HOST = os.environ.get("REDIS_HOST", "redis")
+REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
 
-app = FastAPI(title=SERVICE_NAME, version=VERSION)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.redis = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+    try:
+        yield
+    finally:
+        await app.state.redis.aclose()
+
+
+app = FastAPI(title=SERVICE_NAME, version=VERSION, lifespan=lifespan)
 
 REQ_COUNT = Counter(
-    "aegis_requests_total",
-    "Total HTTP requests",
+    "aegis_requests_total", "Total HTTP requests",
     ["service", "method", "path", "status"],
 )
 REQ_LATENCY = Histogram(
-    "aegis_request_duration_seconds",
-    "Request latency in seconds",
+    "aegis_request_duration_seconds", "Request latency in seconds",
     ["service", "method", "path"],
 )
 MATCH_RESULTS = Counter(
     "aegis_match_results_total",
-    "Matcher decisions: matched | discrepancy (stub).",
+    "Matcher decisions: matched | discrepancy | not_found.",
     ["service", "result"],
 )
 
@@ -52,9 +70,22 @@ def health():
 
 
 @app.get("/ready")
-def ready():
-    # Phase 2: проверка коннекта к Redis (hot lookup), etcd (leader election), Kafka, PG.
-    return {"ready": True, "deps": {"redis": "skipped", "etcd": "skipped", "kafka": "skipped", "postgres": "skipped"}}
+async def ready():
+    deps = {}
+    try:
+        pong = await app.state.redis.ping()
+        deps["redis"] = "ok" if pong else "no-pong"
+        ok = bool(pong)
+    except Exception as e:
+        deps["redis"] = f"error: {type(e).__name__}"
+        ok = False
+    if not ok:
+        return Response(
+            content=json.dumps({"ready": False, "deps": deps}),
+            status_code=503,
+            media_type="application/json",
+        )
+    return {"ready": True, "deps": deps}
 
 
 @app.get("/metrics")
@@ -63,8 +94,28 @@ def metrics():
 
 
 # ---------------------------------------------------------------------------
-# Domain endpoints (Phase 2: реальный matching через Redis ZRANGE expected_until)
+# Domain
 # ---------------------------------------------------------------------------
+
+def _key(tenant_id: str, external_ref: str) -> str:
+    return f"expected:{tenant_id}:{external_ref}"
+
+
+class ExpectedRequest(BaseModel):
+    tenant_id: str
+    external_ref: str
+    amount_minor: int = Field(..., ge=1)
+    currency: str = Field(..., min_length=3, max_length=3)
+    ttl_seconds: int = Field(3600, ge=1, le=86400 * 7)
+
+
+@app.post("/v1/expected", status_code=201)
+async def add_expected(req: ExpectedRequest):
+    """Регистрирует ожидаемую транзакцию (TTL по дефолту 1ч). Используется upstream'ом."""
+    payload = {"amount_minor": req.amount_minor, "currency": req.currency.upper()}
+    await app.state.redis.set(_key(req.tenant_id, req.external_ref), json.dumps(payload), ex=req.ttl_seconds)
+    return {"status": "registered", "ttl_seconds": req.ttl_seconds}
+
 
 class MatchRequest(BaseModel):
     tenant_id: str
@@ -75,16 +126,29 @@ class MatchRequest(BaseModel):
 
 class MatchResponse(BaseModel):
     match_id: str
-    result: Literal["matched", "discrepancy"]
+    result: Literal["matched", "discrepancy", "not_found"]
     reason: str
 
 
-@app.post("/v1/match", response_model=MatchResponse, status_code=200)
-def match(req: MatchRequest):
-    """Stub: всегда возвращает matched. Phase 2: реальный lookup expected в Redis."""
+@app.post("/v1/match", response_model=MatchResponse)
+async def match(req: MatchRequest):
+    raw = await app.state.redis.get(_key(req.tenant_id, req.external_ref))
+    match_id = f"mat_{uuid.uuid4().hex[:16]}"
+
+    if raw is None:
+        MATCH_RESULTS.labels(SERVICE_NAME, "not_found").inc()
+        return MatchResponse(match_id=match_id, result="not_found", reason="no expected record for ref")
+
+    expected = json.loads(raw)
+    if expected["amount_minor"] != req.amount_minor or expected["currency"] != req.currency.upper():
+        MATCH_RESULTS.labels(SERVICE_NAME, "discrepancy").inc()
+        return MatchResponse(
+            match_id=match_id,
+            result="discrepancy",
+            reason=f"expected {expected['amount_minor']} {expected['currency']}, got {req.amount_minor} {req.currency.upper()}",
+        )
+
+    # Match найден — снимаем expected (one-shot).
+    await app.state.redis.delete(_key(req.tenant_id, req.external_ref))
     MATCH_RESULTS.labels(SERVICE_NAME, "matched").inc()
-    return MatchResponse(
-        match_id=f"mat_{uuid.uuid4().hex[:16]}",
-        result="matched",
-        reason="stub: deterministic match, no real lookup",
-    )
+    return MatchResponse(match_id=match_id, result="matched", reason="amount + currency + ref equal to expected")

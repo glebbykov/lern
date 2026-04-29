@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
 SERVICE_NAME = os.environ.get("SERVICE_NAME", "normalizer")
-VERSION = os.environ.get("VERSION", "0.1.0")
+VERSION = os.environ.get("VERSION", "0.2.0")
 
 app = FastAPI(title=SERVICE_NAME, version=VERSION)
 
@@ -53,8 +53,9 @@ def health():
 
 @app.get("/ready")
 def ready():
-    # Phase 2: проверка коннекта к Kafka (consumer raw-feeds), Mongo, Redis (FX cache).
-    return {"ready": True, "deps": {"kafka": "skipped", "mongodb": "skipped", "redis": "skipped"}}
+    # Phase 2.5: подключить Kafka (consumer raw-feeds), MongoDB (RawEvent storage),
+    # Redis (FX-rates cache). Сейчас — без external deps (parser-only, in-memory).
+    return {"ready": True, "deps": {"kafka": "phase-2.5", "mongodb": "phase-2.5", "redis": "phase-2.5"}}
 
 
 @app.get("/metrics")

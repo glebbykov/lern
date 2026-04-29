@@ -2,48 +2,49 @@
 title: Runbook — деплой и обновление микросервисов на az-app
 status: stable
 audience: [ops, llm]
-last_verified: 2026-04-29
+last_verified: 2026-04-30
 related:
   - ../../docker-compose.yml
   - ../../app/
   - deploy.md
   - ../PROJECT_PLAN.md
+  - ../adr/0007-local-stateful-in-compose.md
 ---
 
-# Runbook: микросервисы на az-app (Phase 1 skeleton)
+# Runbook: микросервисы на az-app (Phase 2 — local stateful tier)
 
 > Полный путь от пустого репо до работающих FastAPI-скелетов `ledger-api` / `normalizer` / `matcher` на `az-app`. Опирается на инфраструктуру, поднятую через [deploy.md](deploy.md) (Phase 0).
 
-## Архитектура (Phase 1 skeleton)
+## Архитектура (Phase 2 — local stateful tier)
 
 ```
 Operator (your laptop)
         │  rsync app/ + scp docker-compose.yml
         ▼
-   ┌────────────────────────────────────────┐
-   │ az-app (52.187.237.100)               │
-   │                                        │
-   │ /opt/aegis-app/                        │
-   │   ├── app/                             │
-   │   │   ├── ledger-api/  (Dockerfile)    │
-   │   │   ├── normalizer/  (Dockerfile)    │
-   │   │   └── matcher/     (Dockerfile)    │
-   │   └── docker-compose.yml               │
-   │                                        │
-   │ docker compose build  →  3 OCI образа  │
-   │ docker compose up -d  →  3 контейнера  │
-   │                                        │
-   │  ledger-api :8081 →  python:3.12-alpine + FastAPI │
-   │  normalizer :8082 →  python:3.12-alpine + FastAPI │
-   │  matcher    :8083 →  python:3.12-alpine + FastAPI │
-   └────────────────────────────────────────┘
+   ┌──────────────────────────────────────────────────┐
+   │ az-app (52.187.237.100)  · /opt/aegis-app/      │
+   │                                                  │
+   │  ┌─ aegis-net (docker bridge) ─────────────┐     │
+   │  │                                         │     │
+   │  │   postgres:16-alpine  ←─── ledger-api   │←─── 8081
+   │  │   (volume: pgdata)         (port 80)    │     │
+   │  │                                         │     │
+   │  │   redis:7-alpine     ←──── matcher      │←─── 8083
+   │  │   (volume: redisdata)      (port 80)    │     │
+   │  │                                         │     │
+   │  │                            normalizer   │←─── 8082
+   │  │                            (no deps)    │     │
+   │  └─────────────────────────────────────────┘     │
+   └──────────────────────────────────────────────────┘
 ```
 
-Все три сервиса публикуют:
-- `GET /health` — liveness, всегда 200
-- `GET /ready` — readiness (Phase 2 будет проверять PG/Kafka/etc)
-- `GET /metrics` — Prometheus метрики (`aegis_requests_total`, `aegis_request_duration_seconds`, и domain-specific counter'ы)
-- `POST /v1/<domain>` — заглушка под Phase 2 бизнес-логику
+**Phase 2 компромисс:** PG и Redis запущены **локально на az-app** в том же compose. См. [ADR-0007](../adr/0007-local-stateful-in-compose.md). В Phase 3 `POSTGRES_HOST` / `REDIS_HOST` переключатся на overlay-IP реальной `az-db` (`10.100.0.11`).
+
+Каждый сервис публикует:
+- `GET /health` — liveness, всегда 200.
+- `GET /ready` — **реальный** TCP/native ping deps. 200 если все ok, 503 иначе.
+- `GET /metrics` — Prometheus (`aegis_requests_total`, `aegis_request_duration_seconds`, domain-specific).
+- `POST /v1/<domain>` — реальная бизнес-логика (см. ниже).
 
 Эндпоинты **снаружи закрыты** NSG (только `:22`, `:3000` и WG `:51820/udp`). Локальные curl-ы делаются по SSH.
 
@@ -175,26 +176,58 @@ ssh -F terraform/.generated/ssh_config az-app '
 {"ready":true,"deps":{"postgres":"skipped","kafka":"skipped"}}
 ```
 
-### Domain-эндпоинты
+### Domain-эндпоинты (Phase 2 — реальная логика)
+
+#### ledger-api: запись + idempotency
 
 ```bash
-# ledger-api
-curl -s -X POST http://localhost:8081/v1/entries \
+# Первый POST — статус "accepted", entry_id новый
+curl -X POST http://localhost:8081/v1/entries \
   -H "Content-Type: application/json" \
   -d '{"tenant_id":"acme","debit_account":"a:1","credit_account":"a:2","amount_minor":12345,"currency":"USD","external_ref":"ref-001"}'
 # → {"entry_id":"led_...","status":"accepted"}
 
-# normalizer
-curl -s -X POST http://localhost:8082/v1/normalize \
-  -H "Content-Type: application/json" \
+# Повторный POST с тем же external_ref — статус "duplicate", entry_id ТОТ ЖЕ
+curl -X POST http://localhost:8081/v1/entries -H "Content-Type: application/json" \
+  -d '{"tenant_id":"acme","debit_account":"a:1","credit_account":"a:2","amount_minor":12345,"currency":"USD","external_ref":"ref-001"}'
+# → {"entry_id":"led_<тот же>","status":"duplicate"}
+
+# Что реально лежит в PG
+docker exec postgres psql -U aegis -d aegis -c "SELECT * FROM journal_entries;"
+```
+
+#### matcher: register expected → match
+
+```bash
+# 1. Зарегистрировать ожидаемую транзакцию (TTL 1 час)
+curl -X POST http://localhost:8083/v1/expected -H "Content-Type: application/json" \
+  -d '{"tenant_id":"acme","external_ref":"ref-001","amount_minor":12345,"currency":"USD"}'
+# → {"status":"registered","ttl_seconds":3600}
+
+# 2. Прислать "actual" — совпало
+curl -X POST http://localhost:8083/v1/match -H "Content-Type: application/json" \
+  -d '{"tenant_id":"acme","external_ref":"ref-001","amount_minor":12345,"currency":"USD"}'
+# → {"match_id":"mat_...","result":"matched","reason":"amount + currency + ref equal to expected"}
+
+# 3. Повторно — expected уже снята (one-shot)
+curl -X POST http://localhost:8083/v1/match -H "Content-Type: application/json" \
+  -d '{"tenant_id":"acme","external_ref":"ref-001","amount_minor":12345,"currency":"USD"}'
+# → {"match_id":"mat_...","result":"not_found","reason":"no expected record for ref"}
+
+# 4. Discrepancy: ожидали 99999, прислали 11111
+curl -X POST http://localhost:8083/v1/expected -H "Content-Type: application/json" \
+  -d '{"tenant_id":"acme","external_ref":"ref-002","amount_minor":99999,"currency":"USD"}'
+curl -X POST http://localhost:8083/v1/match -H "Content-Type: application/json" \
+  -d '{"tenant_id":"acme","external_ref":"ref-002","amount_minor":11111,"currency":"USD"}'
+# → {"match_id":"mat_...","result":"discrepancy","reason":"expected 99999 USD, got 11111 USD"}
+```
+
+#### normalizer (Phase 2.5 — пока stub, ждёт Kafka/Mongo)
+
+```bash
+curl -X POST http://localhost:8082/v1/normalize -H "Content-Type: application/json" \
   -d '{"tenant_id":"acme","source_format":"csv","raw_payload":"a\nb\nc"}'
 # → {"feed_id":"feed_...","accepted_records":2,"status":"accepted"}
-
-# matcher
-curl -s -X POST http://localhost:8083/v1/match \
-  -H "Content-Type: application/json" \
-  -d '{"tenant_id":"acme","external_ref":"ref-001","amount_minor":12345,"currency":"USD"}'
-# → {"match_id":"mat_...","result":"matched","reason":"stub: ..."}
 ```
 
 ### Метрики
@@ -286,12 +319,22 @@ Counter'ы Prometheus в памяти процесса — рестарт = rese
 
 ---
 
-## Что дальше (Phase 2)
+## Что дальше
 
-- В каждом `/ready` заменить `"skipped"` на реальные коннекты:
-  - `ledger-api` → PG `10.100.0.11:5432`, Kafka `10.100.0.12:9092`
-  - `normalizer` → Kafka, MongoDB `10.100.0.11:27017`, Redis `10.100.0.11:6379`
-  - `matcher` → Redis, etcd `10.100.0.13:2379`, Kafka, PG
-- Заменить stub'ы `POST /v1/*` на реальную бизнес-логику (см. [PROJECT_PLAN.md §3](../PROJECT_PLAN.md#3-сервисы-и-маппинг-на-инфраструктуру)).
-- Добавить недостающие сервисы: `ingest-api`, `reconcile-batch-worker`, `report-api`, `alerter`, `archiver`.
-- Прописать VictoriaMetrics scrape config: каждый `:80/metrics` на каждом контейнере (через docker network alias или `host.docker.internal`).
+### Phase 2.5 — `normalizer` подключить к Kafka + Mongo
+В local compose добавить `kafka` (KRaft single broker) и `mongo`. `normalizer` начнёт публиковать `RawFeedReceived` в `raw-feeds` и сохранять payload в Mongo.
+
+### Phase 3 — переложение stateful tier на az-db
+1. **Починить WG mesh** на всех узлах (роль `05-overlay-network` должна прогнаться одним заходом на all → факты соберутся, шаблон отрендерится с peer'ами).
+2. **Перенастроить bind** PG / Redis / Mongo / etcd на overlay-IP `10.100.0.11`/`.13` через роль `06-stateful-tier` (сейчас всё слушает `127.0.0.1`).
+3. **Переключить env-vars** в `docker-compose.yml`:
+   - `POSTGRES_HOST=10.100.0.11`
+   - `REDIS_HOST=10.100.0.11`
+   - убрать локальные `postgres:` / `redis:` services.
+4. См. [ADR-0007](../adr/0007-local-stateful-in-compose.md).
+
+### Phase 4 — оставшиеся сервисы
+`ingest-api` (внешний REST), `reconcile-batch-worker` (cron + etcd lock), `report-api`, `alerter`, `archiver` — см. [PROJECT_PLAN §3](../PROJECT_PLAN.md#3-сервисы-и-маппинг-на-инфраструктуру).
+
+### VictoriaMetrics scrape
+Каждый сервис уже отдаёт `/metrics`. После Phase 3 прописать в `prometheus.yml` (или VM-config) static targets `host.docker.internal:8081/8082/8083` или подключить через docker network alias.

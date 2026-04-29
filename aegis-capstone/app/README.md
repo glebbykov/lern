@@ -9,15 +9,15 @@ related:
   - ../docs/runbooks/deploy-services.md
 ---
 
-# Микросервисы Aegis Ledger (Phase 1 skeleton)
+# Микросервисы Aegis Ledger (Phase 2 — local stateful tier)
 
-Минимальные FastAPI-скелеты для трёх сервисов первого приближения. Все три — копия одного шаблона: общий `/health`, `/ready`, `/metrics` + один domain-specific endpoint каждого.
+FastAPI-сервисы с реальной бизнес-логикой против локальных PG/Redis (см. [ADR-0007](../docs/adr/0007-local-stateful-in-compose.md)). Все публикуют `/health`, `/ready` (с настоящей проверкой deps), `/metrics`.
 
-| Каталог | Сервис | Порт | Domain endpoint |
+| Каталог | Порт | Domain endpoint | Что делает реально |
 |---|---|---|---|
-| `ledger-api/` | приём ledger entries (двойная запись — Phase 2) | 8081 | `POST /v1/entries` |
-| `normalizer/` | нормализация feed'ов (Phase 2 — реальный парсинг ISO 20022/CSV/...) | 8082 | `POST /v1/normalize` |
-| `matcher/` | сверка transactions (Phase 2 — реальный lookup через Redis/etcd) | 8083 | `POST /v1/match` |
+| `ledger-api/` | 8081 | `POST /v1/entries` | INSERT в PG `journal_entries`, идемпотентность по `(tenant_id, external_ref)` |
+| `matcher/` | 8083 | `POST /v1/expected`, `POST /v1/match` | Регистрация ожиданий в Redis, one-shot match с detection discrepancy |
+| `normalizer/` | 8082 | `POST /v1/normalize` | Stub до Phase 2.5 (нужен Kafka + Mongo) |
 
 ## Структура каждого сервиса
 
@@ -58,12 +58,13 @@ docker compose down
 
 См. [`docs/runbooks/deploy-services.md`](../docs/runbooks/deploy-services.md).
 
-## Phase 2 — что добавить
+## Что дальше
 
-Каждый сервис должен:
-1. Подключиться к своим dependencies через WireGuard overlay (см. таблицу в [`docs/PROJECT_PLAN.md`](../docs/PROJECT_PLAN.md#3-сервисы-и-маппинг-на-инфраструктуру)).
-2. Вернуть в `/ready` реальный статус коннектов вместо `"skipped"`.
-3. Заменить stub-логику `POST /v1/*` на доменное поведение.
+**Phase 2.5** — `normalizer` подключить к Kafka + Mongo (добавить контейнеры в compose, реальный Kafka producer, MongoDB raw event archive).
+
+**Phase 3** — переложить stateful tier на az-db через WG overlay. Изменение — только env-vars (`POSTGRES_HOST`, `REDIS_HOST`), код приложения не меняется. Подробности — [ADR-0007 §Migration plan](../docs/adr/0007-local-stateful-in-compose.md#migration-plan-phase-3).
+
+**Phase 4** — добавить недостающие сервисы (`ingest-api`, `reconcile-batch-worker`, `report-api`, `alerter`, `archiver`).
 
 ## Соглашения
 
