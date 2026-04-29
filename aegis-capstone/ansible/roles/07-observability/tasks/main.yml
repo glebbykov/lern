@@ -156,15 +156,23 @@
     group: grafana
   when: "'monitor_nodes' in group_names"
 
-# Зачем: Готовый и популярный дашборд для Node Exporter.
-# Почему так: ID 1860 (Node Exporter Full) - индустриальный стандарт.
-- name: Скачивание дашборда Node Exporter Full
+# Зачем: Загрузить готовые индустриальные дашборды для базового мониторинга инфраструктуры и БД.
+# Почему так: Используем публичное API grafana.com. Обратите внимание, что для БД потребуются экспортеры.
+- name: Скачивание дашбордов для базового мониторинга
   get_url:
-    url: https://grafana.com/api/dashboards/1860/revisions/37/download
-    dest: /var/lib/grafana/dashboards/node-exporter-full.json
+    url: "https://grafana.com/api/dashboards/{{ item.id }}/revisions/{{ item.rev }}/download"
+    dest: "/var/lib/grafana/dashboards/{{ item.name }}.json"
     owner: grafana
     group: grafana
+  loop:
+    - { id: '1860', rev: '37', name: 'node-exporter-full' }
+    - { id: '11176', rev: '3', name: 'victoriametrics' }
+    - { id: '9628', rev: '7', name: 'postgresql' }
+    - { id: '763', rev: '14', name: 'redis' }
+    - { id: '16490', rev: '1', name: 'mongodb' }
+    - { id: '11962', rev: '2', name: 'kafka' }
   when: "'monitor_nodes' in group_names"
+  ignore_errors: yes
   notify: restart grafana
 
 # Зачем: Экспортировать метрики CPU/RAM/Disk со всех машин кластера.
