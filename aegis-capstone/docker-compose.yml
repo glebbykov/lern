@@ -1,26 +1,72 @@
-version: '3.8'
+# Phase 0.5 — каркас контейнеров на az-app.
+# Сервисы пока nginx-заглушки (Phase 1 — заменить на FastAPI/Go skeleton'ы с /health, /metrics).
+# Деплой: scp на az-app:/opt/aegis-app/docker-compose.yml + `docker compose up -d`.
 
 services:
   ledger-api:
     image: nginx:alpine
     container_name: ledger-api
+    restart: unless-stopped
+    networks: [aegis-net]
     ports:
       - "8081:80"
     environment:
-      - SERVICE_NAME=Ledger_API
+      - SERVICE_NAME=ledger-api
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   normalizer:
     image: nginx:alpine
     container_name: normalizer
+    restart: unless-stopped
+    networks: [aegis-net]
     ports:
       - "8082:80"
     environment:
-      - SERVICE_NAME=Normalizer
+      - SERVICE_NAME=normalizer
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   matcher:
     image: nginx:alpine
     container_name: matcher
+    restart: unless-stopped
+    networks: [aegis-net]
     ports:
       - "8083:80"
     environment:
-      - SERVICE_NAME=Matcher
+      - SERVICE_NAME=matcher
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  aegis-net:
+    driver: bridge
+    name: aegis-net

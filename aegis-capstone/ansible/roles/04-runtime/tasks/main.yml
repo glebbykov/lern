@@ -47,3 +47,17 @@
     regexp: 'SystemdCgroup = false'
     replace: 'SystemdCgroup = true'
   notify: restart containerd
+
+# Зачем: Дать ansible_user работать с Docker без sudo.
+# Почему так: Группа docker даёт доступ к /var/run/docker.sock; без неё каждая команда требует sudo и docker compose неудобно использовать.
+# Эффект применяется при следующей SSH-сессии (или после reset_connection).
+- name: Добавление ansible_user в группу docker
+  user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: yes
+
+# Зачем: Сбросить SSH-соединение, чтобы новая группа применилась без re-login.
+# Почему так: Membership в группе кэшируется на сессию; meta reset_connection заставляет Ansible переподключиться при следующей задаче.
+- name: Сброс SSH-сессии для применения новой группы
+  meta: reset_connection
