@@ -66,6 +66,12 @@ cd ansible && ansible-playbook -i inventory/hosts.ini site.yml
 
 # Прогнать sanity-проверку без изменений
 ansible-playbook -i inventory/hosts.ini site.yml --check --diff
+
+# Задеплоить микросервисы (Phase 1 skeleton)
+# Полный runbook: docs/runbooks/deploy-services.md
+rsync -avz --delete app/ ansible_user@52.187.237.100:/opt/aegis-app/app/
+scp docker-compose.yml ansible_user@52.187.237.100:/opt/aegis-app/docker-compose.yml
+ssh ansible_user@52.187.237.100 'cd /opt/aegis-app && docker compose up -d --build'
 ```
 
 ## Что считается "done" для задачи в этом репо
