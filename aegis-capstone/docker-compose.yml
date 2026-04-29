@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  ledger-api:
+    image: nginx:alpine
+    container_name: ledger-api
+    ports:
+      - "8081:80"
+    environment:
+      - SERVICE_NAME=Ledger_API
+
+  normalizer:
+    image: nginx:alpine
+    container_name: normalizer
+    ports:
+      - "8082:80"
+    environment:
+      - SERVICE_NAME=Normalizer
+
+  matcher:
+    image: nginx:alpine
+    container_name: matcher
+    ports:
+      - "8083:80"
+    environment:
+      - SERVICE_NAME=Matcher

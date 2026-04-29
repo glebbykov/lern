@@ -39,6 +39,13 @@
         state: present
         update_cache: yes
 
+    - name: Права на директорию MongoDB
+      file:
+        path: /var/lib/mongodb
+        state: directory
+        owner: mongodb
+        group: mongodb
+
     - name: Запуск баз данных
       systemd: name="{{ item }}" state=started enabled=yes
       loop: [postgresql, redis-server, mongod]
@@ -68,7 +75,19 @@
       lineinfile:
         path: /opt/kafka/config/kraft/server.properties
         regexp: '^log.dirs='
-        line: 'log.dirs=/var/lib/kafka'
+        line: 'log.dirs=/var/lib/kafka/data0'
+
+    - name: Настройка слушателей (Listeners) в server.properties
+      lineinfile:
+        path: /opt/kafka/config/kraft/server.properties
+        regexp: '^listeners='
+        line: 'listeners=PLAINTEXT://0.0.0.0:9092,CONTROLLER://:9093'
+
+    - name: Настройка Advertised Listeners в server.properties
+      lineinfile:
+        path: /opt/kafka/config/kraft/server.properties
+        regexp: '^advertised.listeners='
+        line: 'advertised.listeners=PLAINTEXT://{{ hostvars[inventory_hostname].wg_overlay_ip }}:9092'
 
     - name: Форматирование хранилища KRaft (только один раз)
       shell: |

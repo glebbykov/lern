@@ -19,7 +19,7 @@ related:
 | 22 | TCP | SSH (whitelisted) | `var.operator_ip` | `az-app` | <a id="ssh-22"></a>`#ssh-22` |
 | 80 | TCP | HTTP (redirect → 443) | `0.0.0.0/0` | `az-app` | <a id="http-80"></a>`#http-80` |
 | 443 | TCP | HTTPS / Nginx ingress | `0.0.0.0/0` | `az-app` | <a id="https-443"></a>`#https-443` |
-| 3000 | TCP | Grafana UI | через WG / SSH-туннель | `az-app` | <a id="grafana-3000"></a>`#grafana-3000` |
+| 3000 | TCP | Grafana UI | `var.operator_ip` | `az-app` | <a id="grafana-3000"></a>`#grafana-3000` |
 
 ## Внутренние (overlay / VNet)
 

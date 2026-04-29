@@ -1,0 +1,10 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'aegis-infrastructure'
+    static_configs:
+      - targets:
+{% for host in groups['azure_nodes'] %}
+        - '{{ hostvars[host].wg_overlay_ip }}:9100'
+{% endfor %}

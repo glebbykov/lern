@@ -1,3 +1,7 @@
 "aegis_cloud": "azure"
-"aegis_data_devices": []
+"aegis_data_devices":
+- "dev": "/dev/sdb"
+  "fs": "xfs"
+  "mount": "/var/lib/victoria-metrics-data"
+  "name": "monitor"
 "aegis_raid_devices": []

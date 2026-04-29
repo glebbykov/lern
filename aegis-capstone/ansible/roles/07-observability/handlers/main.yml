@@ -1,0 +1,5 @@
+---
+- name: restart victoriametrics
+  systemd:
+    name: victoriametrics
+    state: restarted

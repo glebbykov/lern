@@ -143,6 +143,17 @@ resource "azurerm_network_security_group" "nsg1" {
     destination_address_prefix = "*"
   }
   security_rule {
+    name                       = "grafana"
+    priority                   = 105
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_address_prefix      = var.operator_ip
+    source_port_range          = "*"
+    destination_port_range     = "3000"
+    destination_address_prefix = "*"
+  }
+  security_rule {
     name                       = "internal"
     priority                   = 110
     direction                  = "Inbound"

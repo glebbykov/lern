@@ -17,7 +17,28 @@
   when: "'monitor_nodes' in group_names"
 
 # Зачем: Обеспечить автозапуск и фоновую работу TSDB.
-# Почему так: Данные хранятся на /var/lib/..., retentionPeriod установлен в 1 месяц для экономии места.
+# Почему так: Данные хранятся на /var/lib/..., retentionPeriod установлен в 1 месяц для экономии места. Добавлен параметр promscrape.config для сбора метрик с узлов.
+- name: Директория для конфигурации VictoriaMetrics
+  file:
+    path: /etc/victoriametrics
+    state: directory
+  when: "'monitor_nodes' in group_names"
+
+- name: Конфигурация скрейпинга (Prometheus format)
+  template:
+    src: prometheus.yml.j2
+    dest: /etc/victoriametrics/prometheus.yml
+  when: "'monitor_nodes' in group_names"
+  notify: restart victoriametrics
+
+- name: Директория для данных VictoriaMetrics
+  file:
+    path: /var/lib/victoria-metrics-data
+    state: directory
+    owner: prometheus
+    group: prometheus
+  when: "'monitor_nodes' in group_names"
+
 - name: Настройка Systemd сервиса для VictoriaMetrics
   copy:
     dest: /etc/systemd/system/victoriametrics.service
@@ -28,12 +49,23 @@
 
       [Service]
       User=prometheus
-      ExecStart=/usr/local/bin/victoria-metrics-prod -storageDataPath=/var/lib/victoria-metrics-data -retentionPeriod=1
+      ExecStart=/usr/local/bin/victoria-metrics-prod \
+          -storageDataPath=/var/lib/victoria-metrics-data \
+          -retentionPeriod=1 \
+          -promscrape.config=/etc/victoriametrics/prometheus.yml
       ExecReload=/bin/kill -HUP $MAINPID
       Restart=on-failure
 
       [Install]
       WantedBy=multi-user.target
+  when: "'monitor_nodes' in group_names"
+
+- name: Запуск и включение VictoriaMetrics
+  systemd:
+    name: victoriametrics
+    state: started
+    enabled: yes
+    daemon_reload: yes
   when: "'monitor_nodes' in group_names"
 
 # Зачем: Grafana требует HTTPS-репозиторий.

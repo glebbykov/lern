@@ -14,11 +14,16 @@
     state: present
 
 # Зачем: Базовый runtime для запуска контейнеров будущего Kubernetes и изолированных сервисов (App Sandbox).
-# Почему так: Containerd легче и современнее, чем полный Docker Engine (dockerd).
-- name: Установка containerd
+# Почему так: Устанавливаем и containerd (для K8s), и Docker Engine (для локальной разработки и docker-compose).
+- name: Установка Docker и Containerd
   apt:
-    name: containerd.io
+    name:
+      - containerd.io
+      - docker-ce
+      - docker-ce-cli
+      - docker-compose-plugin
     state: present
+    update_cache: yes
 
 # Зачем: Сгенерировать полный конфиг со всеми параметрами, чтобы потом изменить нужный.
 # Почему так: `changed_when: false` не портит статистику Ansible (это read-only операция).

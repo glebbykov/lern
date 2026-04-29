@@ -4,4 +4,8 @@
   "fs": "xfs"
   "mount": "/var/lib/kafka/data0"
   "name": "kafka_jbod0"
+- "dev": "/dev/sdd"
+  "fs": "xfs"
+  "mount": "/var/lib/kafka/data1"
+  "name": "kafka_jbod1"
 "aegis_raid_devices": []

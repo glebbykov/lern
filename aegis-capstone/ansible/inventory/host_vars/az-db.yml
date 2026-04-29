@@ -8,7 +8,7 @@
   "fs": "xfs"
   "mount": "/var/lib/mongodb"
   "name": "mongo"
-- "dev": "/dev/sdb"
+- "dev": "/dev/sde"
   "fs": "ext4"
   "mount": "/var/lib/redis"
   "name": "redis"
