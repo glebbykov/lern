@@ -112,6 +112,61 @@
     enabled: yes
   when: "'monitor_nodes' in group_names"
 
+# Зачем: Автоматическое добавление VictoriaMetrics как источника данных в Grafana.
+# Почему так: Provisioning избавляет от ручной настройки в UI.
+- name: Настройка Datasource для Grafana
+  copy:
+    dest: /etc/grafana/provisioning/datasources/victoriametrics.yml
+    content: |
+      apiVersion: 1
+      datasources:
+        - name: VictoriaMetrics
+          type: prometheus
+          access: proxy
+          url: http://localhost:8428
+          isDefault: true
+  when: "'monitor_nodes' in group_names"
+  notify: restart grafana
+
+# Зачем: Указать Grafana, откуда читать готовые дашборды.
+# Почему так: Файловый провайдер — стандартный подход для IaC.
+- name: Настройка провайдера дашбордов для Grafana
+  copy:
+    dest: /etc/grafana/provisioning/dashboards/default.yml
+    content: |
+      apiVersion: 1
+      providers:
+        - name: 'Default'
+          orgId: 1
+          folder: ''
+          type: file
+          disableDeletion: false
+          options:
+            path: /var/lib/grafana/dashboards
+  when: "'monitor_nodes' in group_names"
+  notify: restart grafana
+
+# Зачем: Место для хранения скачанных дашбордов.
+# Почему так: У Grafana должен быть доступ на чтение к этой папке.
+- name: Создание директории для дашбордов
+  file:
+    path: /var/lib/grafana/dashboards
+    state: directory
+    owner: grafana
+    group: grafana
+  when: "'monitor_nodes' in group_names"
+
+# Зачем: Готовый и популярный дашборд для Node Exporter.
+# Почему так: ID 1860 (Node Exporter Full) - индустриальный стандарт.
+- name: Скачивание дашборда Node Exporter Full
+  get_url:
+    url: https://grafana.com/api/dashboards/1860/revisions/37/download
+    dest: /var/lib/grafana/dashboards/node-exporter-full.json
+    owner: grafana
+    group: grafana
+  when: "'monitor_nodes' in group_names"
+  notify: restart grafana
+
 # Зачем: Экспортировать метрики CPU/RAM/Disk со всех машин кластера.
 # Почему так: Устанавливается через бинарник, так как версия в apt часто устаревшая.
 - name: Установка Node Exporter на все машины

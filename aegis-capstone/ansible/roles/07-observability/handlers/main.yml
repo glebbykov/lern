@@ -3,3 +3,8 @@
   systemd:
     name: victoriametrics
     state: restarted
+
+- name: restart grafana
+  systemd:
+    name: grafana-server
+    state: restarted

@@ -6,5 +6,7 @@ scrape_configs:
     static_configs:
       - targets:
 {% for host in groups['azure_nodes'] %}
+{% if hostvars[host].wg_overlay_ip is defined %}
         - '{{ hostvars[host].wg_overlay_ip }}:9100'
+{% endif %}
 {% endfor %}
