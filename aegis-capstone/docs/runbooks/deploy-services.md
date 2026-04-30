@@ -22,7 +22,7 @@ Operator (your laptop)
         │  rsync app/ + scp docker-compose.yml
         ▼
    ┌──────────────────────────────────────────────────┐
-   │ az-app (52.187.237.100)  · /opt/aegis-app/      │
+   │ az-app ($APP_IP)  · /opt/aegis-app/      │
    │                                                  │
    │  ┌─ aegis-net (docker bridge) ─────────────┐     │
    │  │                                         │     │
@@ -56,6 +56,12 @@ Operator (your laptop)
 - [ ] Локально установлены: `rsync`, `ssh`, `scp` (для деплоя сорцов).
 - [ ] Доступ по SSH к `az-app` работает: `ssh -F terraform/.generated/ssh_config az-app whoami` → `ansible_user`.
 - [ ] `ansible_user` на az-app **в группе docker** (роль `04-runtime` это делает; если нет — `sudo usermod -aG docker ansible_user`).
+- [ ] Public IP `az-app` известен (далее `$APP_IP`):
+  ```bash
+  APP_IP=$(awk '/^az-app/{for(i=1;i<=NF;i++) if($i ~ /^ansible_host=/) print substr($i,14)}' \
+            /root/lern/aegis-capstone/ansible/inventory/hosts.ini)
+  echo "az-app: $APP_IP"
+  ```
 
 ---
 
@@ -101,7 +107,7 @@ ssh -F terraform/.generated/ssh_config az-app '
 ```bash
 SSH_KEY=~/.ssh/id_ed25519
 SSH_OPTS="-i $SSH_KEY -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null"
-HOST="ansible_user@52.187.237.100"
+HOST="ansible_user@$APP_IP"
 
 # Сорцы сервисов
 rsync -avz -e "ssh $SSH_OPTS" --delete app/ "$HOST":/opt/aegis-app/app/

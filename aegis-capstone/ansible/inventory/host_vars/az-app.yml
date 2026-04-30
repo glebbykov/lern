@@ -5,4 +5,4 @@
   "mount": "/var/lib/victoria-metrics-data"
   "name": "monitor"
 "aegis_raid_luns": []
-"aegis_region": "australiaeast"
+"aegis_region": "southeastasia"

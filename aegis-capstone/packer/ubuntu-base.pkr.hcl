@@ -28,6 +28,10 @@ variable "tenant_id" {
 }
 
 source "azure-arm" "ubuntu" {
+  # Auth: либо service principal через ARM_CLIENT_ID/ARM_CLIENT_SECRET/ARM_TENANT_ID,
+  # либо `az login`-идентичность через use_azure_cli_auth (требует az CLI на хосте).
+  use_azure_cli_auth = var.client_id == "" ? true : false
+
   client_id       = var.client_id
   client_secret   = var.client_secret
   subscription_id = var.subscription_id
