@@ -27,11 +27,18 @@ Aegis — это B2B SaaS-платформа для fintech-компаний, п
 
 Вся инфраструктура полностью управляется через IaC (Terraform + Ansible). Ручные операции запрещены.
 
+### 0. Сборка базового образа (Packer)
+Мы используем "золотые образы" (Immutable Images) для ускорения развертывания. Все тяжелые зависимости (LVM, WireGuard, Docker, Java) уже вшиты в образ. Образ хранится в **Azure Compute Gallery** и доступен во всех регионах.
+
+```bash
+cd packer
+packer build ubuntu-base.pkr.hcl
+```
+
 ### 1. Поднятие облачных ресурсов (Terraform)
-Terraform создаст VNet, пиринги (Full Mesh) и 5 виртуальных машин с нужным количеством дисков.
+Terraform создаст VNet, пиринги (Full Mesh) и 5 виртуальных машин, используя последний образ из Gallery.
 ```bash
 cd terraform
-terraform init
 terraform apply -auto-approve
 ```
 

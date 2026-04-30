@@ -6,6 +6,7 @@
     name: wireguard
     state: present
     update_cache: yes
+  when: not (aegis_immutable_base | default(false) | bool)
 
 # Зачем: Место для хранения ключей и конфигов WG.
 # Почему так: mode '0700' критичен для безопасности приватных ключей.

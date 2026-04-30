@@ -53,6 +53,7 @@ resource "local_file" "inventory" {
     [all:vars]
     ansible_user=${var.vm_admin_user}
     ansible_ssh_private_key_file=~/.ssh/id_ed25519
+    aegis_immutable_base=true
   EOT
 }
 

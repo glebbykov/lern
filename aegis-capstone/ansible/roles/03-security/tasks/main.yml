@@ -7,6 +7,7 @@
       - ufw
       - auditd
     state: present
+  when: not (aegis_immutable_base | default(false) | bool)
 
 # Зачем: Не потерять доступ к серверу после включения файрвола.
 # Почему так: TCP 22 открыт глобально, так как доступ к узлу ограничен снаружи через NSG в Azure.

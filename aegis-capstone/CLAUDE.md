@@ -90,8 +90,18 @@ ssh ansible_user@52.187.237.100 'cd /opt/aegis-app && docker compose up -d --bui
 - **Frontmatter обязателен** в каждом значимом `.md` (см. [docs/RULES.md](docs/RULES.md)).
 
 ## Особенности инфраструктуры
+- **Immutable Images (Packer)**: Основные зависимости (LVM, WireGuard, Docker/Containerd, Node Exporter) запечены в базовый образ. Это ускоряет развертывание в 3-4 раза.
+  - Образ собирается в регионе `southeastasia` (r3) для обхода ограничений квоты vCPU в `australiaeast`.
+  - ID образа прописывается в `terraform.tfvars` (`azure_image_id`).
 - **Disk Discovery**: Диски в Azure определяются динамически через **LUN** (Logical Unit Number). Роль `01-storage` резолвит LUN в системные имена (`/dev/sdX`) через `/dev/disk/by-path`. Это гарантирует стабильность при изменении порядка или имен устройств облаком.
 - **Производительность**: Включен SSH Pipelining и увеличено количество `forks` (20) в `ansible.cfg` для ускорения развертывания.
+
+## Команды разработки
+- **Packer Build**: `cd packer && packer build ubuntu-base.pkr.hcl`
+- **Terraform Plan**: `cd terraform && terraform plan`
+- **Terraform Apply**: `cd terraform && terraform apply -auto-approve`
+- **Ansible Ping**: `cd ansible && /root/.venv/bin/ansible -i inventory/hosts.ini all -m ping`
+- **Full Deploy**: `cd ansible && /root/.venv/bin/ansible-playbook -i inventory/hosts.ini site.yml`
 
 ## Подводные камни
 

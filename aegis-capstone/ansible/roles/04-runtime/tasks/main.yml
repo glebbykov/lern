@@ -24,6 +24,14 @@
       - docker-compose-plugin
     state: present
     update_cache: yes
+  when: not (aegis_immutable_base | default(false) | bool)
+
+# Зачем: Группа docker может отсутствовать, если установка была пропущена или выполнялась частично.
+# Почему так: Гарантирует успех следующего шага по добавлению пользователя.
+- name: Создание группы docker
+  group:
+    name: docker
+    state: present
 
 # Зачем: Сгенерировать полный конфиг со всеми параметрами, чтобы потом изменить нужный.
 # Почему так: `changed_when: false` не портит статистику Ansible (это read-only операция).
@@ -31,6 +39,14 @@
   command: containerd config default
   register: containerd_config
   changed_when: false
+
+# Зачем: Место для хранения конфига containerd.
+# Почему так: Директория может отсутствовать при установке базового пакета.
+- name: Создание директории /etc/containerd
+  file:
+    path: /etc/containerd
+    state: directory
+    mode: '0755'
 
 # Зачем: Сохранить сгенерированный шаблон в файл настроек.
 # Почему так: Перезаписывает дефолтный пустой или старый конфиг.

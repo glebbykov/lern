@@ -233,14 +233,21 @@ resource "azurerm_network_interface" "nics" {
     public_ip_address_id          = each.value.pip
   }
 }
+data "azurerm_shared_image_version" "latest" {
+  name                = "latest"
+  image_name          = "aegis-ubuntu-base"
+  gallery_name        = "aegis_gallery"
+  resource_group_name = azurerm_resource_group.r1.name
+}
 
 resource "azurerm_linux_virtual_machine" "vms" {
-  for_each                        = local.az_vms
-  name                            = "az-${each.key}"
-  resource_group_name             = each.value.rg.name
-  location                        = each.value.rg.location
-  size                            = var.azure_vm_size
-  admin_username                  = var.vm_admin_user
+  for_each = local.az_vms
+
+  name                = "az-${each.key}"
+  resource_group_name = each.value.rg.name
+  location            = each.value.rg.location
+  size                = var.azure_vm_size
+  admin_username      = var.vm_admin_user
   disable_password_authentication = true
   network_interface_ids           = [azurerm_network_interface.nics[each.key].id]
 
@@ -254,12 +261,9 @@ resource "azurerm_linux_virtual_machine" "vms" {
     storage_account_type = "Premium_LRS"
   }
 
-  source_image_reference {
-    offer     = "0001-com-ubuntu-server-jammy"
-    publisher = "Canonical"
-    sku       = "22_04-lts-gen2"
-    version   = "latest"
-  }
+  source_image_id = data.azurerm_shared_image_version.latest.id
+
+  # source_image_reference block is removed as we always use the gallery image now.
 }
 
 resource "azurerm_managed_disk" "disks" {

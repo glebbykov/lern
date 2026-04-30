@@ -6,6 +6,7 @@
     name: [lvm2, xfsprogs]
     state: present
     update_cache: yes
+  when: not (aegis_immutable_base | default(false) | bool)
 
 # Зачем: В Azure диски могут прикрепляться на лету и не сразу появиться в ОС.
 # Почему так: Форсированный рескан SCSI шины гарантирует, что Ansible увидит `/dev/sdX` перед созданием LVM/RAID.
@@ -55,6 +56,19 @@
     name: mdadm
     state: present
   when: aegis_raid_devices_final | length > 0
+
+- name: Остановка существующих RAID массивов
+  shell: |
+    mdadm --stop /dev/md* || true
+    mdadm --remove /dev/md* || true
+  when: aegis_raid_devices_final | length >= 3
+  changed_when: false
+
+- name: Очистка дисков перед созданием RAID (Azure)
+  shell: "mdadm --zero-superblock {{ item }} || true"
+  loop: "{{ aegis_raid_devices_final }}"
+  when: aegis_raid_devices_final | length >= 3
+  changed_when: false
 
 # Зачем: Обеспечить отказоустойчивое хранилище (RAID 5) для архивов и бэкапов.
 # Почему так: `creates: /dev/md0` обеспечивает идемпотентность (не пересоздает массив, если он уже есть).
