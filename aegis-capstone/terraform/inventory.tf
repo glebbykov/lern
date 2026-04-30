@@ -27,6 +27,17 @@ resource "local_file" "inventory" {
     az-etcd
     az-storage
 
+    [stateful:children]
+    db_nodes
+    kafka_nodes
+    etcd_nodes
+
+    [k8s_future:children]
+    app_nodes
+
+    [runtime_hosts:children]
+    app_nodes
+
     [app_nodes:vars]
     ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null'
 
@@ -69,9 +80,9 @@ resource "local_file" "hv_az_app" {
   content  = yamlencode({
     aegis_cloud = "azure",
     aegis_data_devices = [
-      { name = "monitor", dev = "/dev/sdc", fs = "xfs", mount = "/var/lib/victoria-metrics-data" }
+      { name = "monitor", lun = 0, fs = "xfs", mount = "/var/lib/victoria-metrics-data" }
     ],
-    aegis_raid_devices = []
+    aegis_raid_luns = []
   })
 }
 
@@ -80,11 +91,11 @@ resource "local_file" "hv_az_db" {
   content  = yamlencode({
     aegis_cloud = "azure",
     aegis_data_devices = [
-      { name = "pgsql", dev = "/dev/sdc", fs = "ext4", mount = "/var/lib/postgresql" },
-      { name = "mongo", dev = "/dev/sdd", fs = "xfs", mount = "/var/lib/mongodb" },
-      { name = "redis", dev = "/dev/sde", fs = "ext4", mount = "/var/lib/redis" }
+      { name = "pgsql", lun = 0, fs = "ext4", mount = "/var/lib/postgresql" },
+      { name = "mongo", lun = 1, fs = "xfs", mount = "/var/lib/mongodb" },
+      { name = "redis", lun = 2, fs = "ext4", mount = "/var/lib/redis" }
     ],
-    aegis_raid_devices = []
+    aegis_raid_luns = []
   })
 }
 
@@ -93,10 +104,10 @@ resource "local_file" "hv_az_kafka" {
   content  = yamlencode({
     aegis_cloud = "azure",
     aegis_data_devices = [
-      { name = "kafka_jbod0", dev = "/dev/sdc", fs = "xfs", mount = "/var/lib/kafka/data0" },
-      { name = "kafka_jbod1", dev = "/dev/sdd", fs = "xfs", mount = "/var/lib/kafka/data1" }
+      { name = "kafka_jbod0", lun = 0, fs = "xfs", mount = "/var/lib/kafka/data0" },
+      { name = "kafka_jbod1", lun = 1, fs = "xfs", mount = "/var/lib/kafka/data1" }
     ],
-    aegis_raid_devices = []
+    aegis_raid_luns = []
   })
 }
 
@@ -105,9 +116,9 @@ resource "local_file" "hv_az_etcd" {
   content  = yamlencode({
     aegis_cloud = "azure",
     aegis_data_devices = [
-      { name = "etcd", dev = "/dev/sdc", fs = "ext4", mount = "/var/lib/etcd" }
+      { name = "etcd", lun = 0, fs = "ext4", mount = "/var/lib/etcd" }
     ],
-    aegis_raid_devices = []
+    aegis_raid_luns = []
   })
 }
 
@@ -118,6 +129,6 @@ resource "local_file" "hv_az_storage" {
     aegis_data_devices = [
       { name = "backups", dev = "/dev/md0", fs = "xfs", mount = "/mnt/backups" }
     ],
-    aegis_raid_devices = ["/dev/sdc", "/dev/sdd", "/dev/sde"]
+    aegis_raid_luns = [0, 1, 2]
   })
 }

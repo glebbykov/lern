@@ -37,9 +37,10 @@ terraform apply -auto-approve
 
 ### 2. Конфигурация узлов (Ansible)
 Ansible раскатает LVM/RAID, настроит ядро, поднимет WireGuard mesh и установит все базы данных (PostgreSQL, MongoDB, Redis, Kafka, etcd).
+Развертывание оптимизировано (SSH Pipelining, Forks=20) и устойчиво к изменениям имен дисков (LUN discovery).
+
 ```bash
 cd ../ansible
-ansible-galaxy collection install community.general
 ansible-playbook -i inventory/hosts.ini site.yml
 ```
 

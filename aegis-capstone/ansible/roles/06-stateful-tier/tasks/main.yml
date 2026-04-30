@@ -139,6 +139,14 @@
           ETCD_LISTEN_CLIENT_URLS="http://0.0.0.0:2379"
           ETCD_ADVERTISE_CLIENT_URLS="http://localhost:2379"
 
+    - name: Права на директорию etcd
+      file:
+        path: /var/lib/etcd
+        state: directory
+        owner: etcd
+        group: etcd
+        recurse: yes
+
     - name: Запуск etcd
       systemd: name=etcd state=started enabled=yes
   when: "'etcd_nodes' in group_names"

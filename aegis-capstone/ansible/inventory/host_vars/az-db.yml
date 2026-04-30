@@ -1,15 +1,15 @@
 "aegis_cloud": "azure"
 "aegis_data_devices":
-- "dev": "/dev/sdc"
-  "fs": "ext4"
+- "fs": "ext4"
+  "lun": 0
   "mount": "/var/lib/postgresql"
   "name": "pgsql"
-- "dev": "/dev/sdd"
-  "fs": "xfs"
+- "fs": "xfs"
+  "lun": 1
   "mount": "/var/lib/mongodb"
   "name": "mongo"
-- "dev": "/dev/sde"
-  "fs": "ext4"
+- "fs": "ext4"
+  "lun": 2
   "mount": "/var/lib/redis"
   "name": "redis"
-"aegis_raid_devices": []
+"aegis_raid_luns": []

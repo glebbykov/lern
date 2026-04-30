@@ -4,7 +4,7 @@
   "fs": "xfs"
   "mount": "/mnt/backups"
   "name": "backups"
-"aegis_raid_devices":
-- "/dev/sdc"
-- "/dev/sdd"
-- "/dev/sde"
+"aegis_raid_luns":
+- 0
+- 1
+- 2

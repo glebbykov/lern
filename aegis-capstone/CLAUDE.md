@@ -89,8 +89,11 @@ ssh ansible_user@52.187.237.100 'cd /opt/aegis-app && docker compose up -d --bui
 - **Diagrams as code (Mermaid)**, не PNG.
 - **Frontmatter обязателен** в каждом значимом `.md` (см. [docs/RULES.md](docs/RULES.md)).
 
+## Особенности инфраструктуры
+- **Disk Discovery**: Диски в Azure определяются динамически через **LUN** (Logical Unit Number). Роль `01-storage` резолвит LUN в системные имена (`/dev/sdX`) через `/dev/disk/by-path`. Это гарантирует стабильность при изменении порядка или имен устройств облаком.
+- **Производительность**: Включен SSH Pipelining и увеличено количество `forks` (20) в `ansible.cfg` для ускорения развертывания.
+
 ## Подводные камни
 
-- **R2↔R3 peering отсутствует** в `azure.tf`. Из-за этого `kafka`/`etcd` (r2) не видят `storage` (r3) на L3. WireGuard mesh от этого ломается. Фикс — добавить пары `p23`/`p32`, либо переехать на hub-and-spoke.
 - **`provision/azure_*.sh`** — устаревшие bash-скрипты эпохи "до-Terraform". Не использовать. Можно удалить.
 - **`generate_tf.py`** удалён (см. [ADR-0005](docs/adr/0005-remove-generate-tf-py.md)). Если видишь его — что-то пошло не так.

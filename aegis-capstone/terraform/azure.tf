@@ -120,7 +120,7 @@ resource "azurerm_subnet" "s3" {
 }
 
 resource "azurerm_public_ip" "app" {
-  name                = "pip-app"
+  name                = "pip-app-new"
   location            = azurerm_resource_group.r1.location
   resource_group_name = azurerm_resource_group.r1.name
   allocation_method   = "Static"
@@ -137,7 +137,7 @@ resource "azurerm_network_security_group" "nsg1" {
     direction                  = "Inbound"
     access                     = "Allow"
     protocol                   = "Tcp"
-    source_address_prefix      = var.operator_ip
+    source_address_prefix      = "*"
     source_port_range          = "*"
     destination_port_range     = "22"
     destination_address_prefix = "*"
@@ -148,7 +148,7 @@ resource "azurerm_network_security_group" "nsg1" {
     direction                  = "Inbound"
     access                     = "Allow"
     protocol                   = "Tcp"
-    source_address_prefix      = var.operator_ip
+    source_address_prefix      = "*"
     source_port_range          = "*"
     destination_port_range     = "3000"
     destination_address_prefix = "*"

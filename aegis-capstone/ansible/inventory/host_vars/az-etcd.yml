@@ -1,7 +1,7 @@
 "aegis_cloud": "azure"
 "aegis_data_devices":
-- "dev": "/dev/sdc"
-  "fs": "ext4"
+- "fs": "ext4"
+  "lun": 0
   "mount": "/var/lib/etcd"
   "name": "etcd"
-"aegis_raid_devices": []
+"aegis_raid_luns": []

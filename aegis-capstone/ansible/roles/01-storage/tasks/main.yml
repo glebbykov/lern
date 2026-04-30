@@ -16,13 +16,45 @@
     executable: /bin/bash
   changed_when: false
 
+- name: Резолв LUN в имена устройств (Azure)
+  shell: |
+    ls -l /dev/disk/by-path/*-scsi-0:0:0:{{ item.lun }} | awk '{print $NF}' | sed 's|../../|/dev/|'
+  register: resolved_data_devs
+  loop: "{{ aegis_data_devices | default([]) }}"
+  loop_control:
+    label: "Resolving {{ item.name }} (LUN: {{ item.lun | default('N/A') }})"
+  when: item.lun is defined
+  changed_when: false
+
+- name: Резолв LUN для RAID (Azure)
+  shell: |
+    ls -l /dev/disk/by-path/*-scsi-0:0:0:{{ item }} | awk '{print $NF}' | sed 's|../../|/dev/|'
+  register: resolved_raid_devs
+  loop: "{{ aegis_raid_luns | default([]) }}"
+  when: aegis_raid_luns | default([]) | length > 0
+  changed_when: false
+
+- name: Подготовка списков устройств
+  set_fact:
+    aegis_data_devices_final: >-
+      {% set results = [] %}
+      {% for item in resolved_data_devs.results | default([]) %}
+        {% if not item.skipped | default(false) %}
+          {% set _ = results.append(item.item | combine({'dev': item.stdout})) %}
+        {% else %}
+          {% set _ = results.append(item.item) %}
+        {% endif %}
+      {% endfor %}
+      {{ results }}
+    aegis_raid_devices_final: "{{ resolved_raid_devs.results | default([]) | map(attribute='stdout') | list }}"
+
 # Зачем: Зависимость для создания software RAID (используется для бэкап-узла).
 # Почему так: Устанавливается условно (только если есть список `aegis_raid_devices`), чтобы не засорять остальные узлы.
 - name: Установка mdadm для RAID
   apt:
     name: mdadm
     state: present
-  when: aegis_raid_devices | default([]) | length > 0
+  when: aegis_raid_devices_final | length > 0
 
 # Зачем: Обеспечить отказоустойчивое хранилище (RAID 5) для архивов и бэкапов.
 # Почему так: `creates: /dev/md0` обеспечивает идемпотентность (не пересоздает массив, если он уже есть).
@@ -30,12 +62,12 @@
   command: >-
     mdadm --create --verbose /dev/md0
       --level=5
-      --raid-devices={{ aegis_raid_devices | length }}
-      {{ aegis_raid_devices | join(' ') }}
+      --raid-devices={{ aegis_raid_devices_final | length }}
+      {{ aegis_raid_devices_final | join(' ') }}
       --run
   args:
     creates: /dev/md0
-  when: aegis_raid_devices | default([]) | length >= 3
+  when: aegis_raid_devices_final | length >= 3
   notify: update initramfs
 
 # Зачем: Ядро при загрузке должно знать, из каких дисков собирать RAID, чтобы примонтировать его.
@@ -46,7 +78,7 @@
     executable: /bin/bash
   register: mdadm_scan
   changed_when: mdadm_scan.rc == 0
-  when: aegis_raid_devices | default([]) | length >= 3
+  when: aegis_raid_devices_final | length >= 3
   # Не используем creates, так как мы хотим убедиться что запись там есть. 
   # В идеале использовать lineinfile или template, но mdadm --scan надежнее для генерации строки.
 
@@ -56,7 +88,7 @@
   community.general.lvg:
     vg: "vg_{{ item.name }}"
     pvs: "{{ item.dev }}"
-  loop: "{{ aegis_data_devices | default([]) }}"
+  loop: "{{ aegis_data_devices_final | selectattr('dev', 'defined') | list }}"
   loop_control:
     label: "{{ item.name }} → {{ item.dev }}"
 
@@ -67,7 +99,7 @@
     vg: "vg_{{ item.name }}"
     lv: "lv_{{ item.name }}"
     size: 100%FREE
-  loop: "{{ aegis_data_devices | default([]) }}"
+  loop: "{{ aegis_data_devices_final | selectattr('dev', 'defined') | list }}"
   loop_control:
     label: "lv_{{ item.name }}"
   ignore_errors: yes
@@ -78,7 +110,7 @@
   filesystem:
     fstype: "{{ item.fs }}"
     dev: "/dev/vg_{{ item.name }}/lv_{{ item.name }}"
-  loop: "{{ aegis_data_devices | default([]) }}"
+  loop: "{{ aegis_data_devices_final | selectattr('dev', 'defined') | list }}"
   loop_control:
     label: "{{ item.fs }} on lv_{{ item.name }}"
 
@@ -88,7 +120,7 @@
   file:
     path: "{{ item.mount }}"
     state: directory
-  loop: "{{ aegis_data_devices | default([]) }}"
+  loop: "{{ aegis_data_devices_final | selectattr('dev', 'defined') | list }}"
   loop_control:
     label: "{{ item.mount }}"
 
@@ -100,6 +132,7 @@
     src: "/dev/vg_{{ item.name }}/lv_{{ item.name }}"
     fstype: "{{ item.fs }}"
     state: mounted
-  loop: "{{ aegis_data_devices | default([]) }}"
+  loop: "{{ aegis_data_devices_final | selectattr('dev', 'defined') | list }}"
   loop_control:
     label: "{{ item.mount }}"
+
