@@ -9,3 +9,4 @@
   "mount": "/var/lib/kafka/data1"
   "name": "kafka_jbod1"
 "aegis_raid_luns": []
+"aegis_region": "australiasoutheast"

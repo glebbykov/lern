@@ -10,17 +10,17 @@ provider "azurerm" {
 
 resource "azurerm_resource_group" "r1" {
   name     = "${var.project_name}-az-r1"
-  location = var.azure_location_1
+  location = var.azure_locations[0]
 }
 
 resource "azurerm_resource_group" "r2" {
   name     = "${var.project_name}-az-r2"
-  location = var.azure_location_2
+  location = var.azure_locations[1]
 }
 
 resource "azurerm_resource_group" "r3" {
   name     = "${var.project_name}-az-r3"
-  location = var.azure_location_3
+  location = var.azure_locations[2]
 }
 
 resource "azurerm_virtual_network" "v1" {

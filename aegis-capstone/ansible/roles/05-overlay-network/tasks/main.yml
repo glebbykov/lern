@@ -1,13 +1,6 @@
 ---
 # Зачем: Установить ядро и утилиты для создания VPN.
 # Почему так: WireGuard работает на уровне ядра (быстро) и не требует сложных PKI как OpenVPN.
-- name: Установка WireGuard
-  apt:
-    name: wireguard
-    state: present
-    update_cache: yes
-  when: not (aegis_immutable_base | default(false) | bool)
-
 # Зачем: Место для хранения ключей и конфигов WG.
 # Почему так: mode '0700' критичен для безопасности приватных ключей.
 - name: Убедиться, что директория WireGuard существует

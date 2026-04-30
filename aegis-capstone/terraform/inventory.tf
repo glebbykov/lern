@@ -80,6 +80,7 @@ resource "local_file" "hv_az_app" {
   filename = "../ansible/inventory/host_vars/az-app.yml"
   content  = yamlencode({
     aegis_cloud = "azure",
+    aegis_region = azurerm_resource_group.r1.location,
     aegis_data_devices = [
       { name = "monitor", lun = 0, fs = "xfs", mount = "/var/lib/victoria-metrics-data" }
     ],
@@ -91,6 +92,7 @@ resource "local_file" "hv_az_db" {
   filename = "../ansible/inventory/host_vars/az-db.yml"
   content  = yamlencode({
     aegis_cloud = "azure",
+    aegis_region = azurerm_resource_group.r1.location,
     aegis_data_devices = [
       { name = "pgsql", lun = 0, fs = "ext4", mount = "/var/lib/postgresql" },
       { name = "mongo", lun = 1, fs = "xfs", mount = "/var/lib/mongodb" },
@@ -104,6 +106,7 @@ resource "local_file" "hv_az_kafka" {
   filename = "../ansible/inventory/host_vars/az-kafka.yml"
   content  = yamlencode({
     aegis_cloud = "azure",
+    aegis_region = azurerm_resource_group.r2.location,
     aegis_data_devices = [
       { name = "kafka_jbod0", lun = 0, fs = "xfs", mount = "/var/lib/kafka/data0" },
       { name = "kafka_jbod1", lun = 1, fs = "xfs", mount = "/var/lib/kafka/data1" }
@@ -116,6 +119,7 @@ resource "local_file" "hv_az_etcd" {
   filename = "../ansible/inventory/host_vars/az-etcd.yml"
   content  = yamlencode({
     aegis_cloud = "azure",
+    aegis_region = azurerm_resource_group.r2.location,
     aegis_data_devices = [
       { name = "etcd", lun = 0, fs = "ext4", mount = "/var/lib/etcd" }
     ],
@@ -127,6 +131,7 @@ resource "local_file" "hv_az_storage" {
   filename = "../ansible/inventory/host_vars/az-storage.yml"
   content  = yamlencode({
     aegis_cloud = "azure",
+    aegis_region = azurerm_resource_group.r3.location,
     aegis_data_devices = [
       { name = "backups", dev = "/dev/md0", fs = "xfs", mount = "/mnt/backups" }
     ],

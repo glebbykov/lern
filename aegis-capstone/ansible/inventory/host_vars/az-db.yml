@@ -13,3 +13,4 @@
   "mount": "/var/lib/redis"
   "name": "redis"
 "aegis_raid_luns": []
+"aegis_region": "australiaeast"

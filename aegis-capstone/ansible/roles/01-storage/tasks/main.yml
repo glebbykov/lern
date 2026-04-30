@@ -1,15 +1,6 @@
 ---
 # Зачем: Облачные образы не включают нужные ФС-утилиты по умолчанию.
 # Почему так: LVM нужен для гибкой разметки, XFS - лучшая ФС для Mongo/Kafka (требование/рекомендация вендора).
-- name: Установка зависимостей хранилища
-  apt:
-    name: [lvm2, xfsprogs]
-    state: present
-    update_cache: yes
-  when: not (aegis_immutable_base | default(false) | bool)
-
-# Зачем: В Azure диски могут прикрепляться на лету и не сразу появиться в ОС.
-# Почему так: Форсированный рескан SCSI шины гарантирует, что Ansible увидит `/dev/sdX` перед созданием LVM/RAID.
 - name: Рескан SCSI шины для обнаружения новых дисков Azure
   shell: |
     for host in /sys/class/scsi_host/*; do echo "- - -" > $host/scan; done

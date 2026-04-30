@@ -5,3 +5,4 @@
   "mount": "/var/lib/etcd"
   "name": "etcd"
 "aegis_raid_luns": []
+"aegis_region": "australiasoutheast"
