@@ -389,6 +389,19 @@ terraform import azurerm_virtual_network_peering.p31 /subscriptions/<sub>/resour
 ### Docker compose: `ERROR: Failed building wheel for aiokafka` на alpine
 `python:3.12-alpine` не имеет `gcc`, а у `aiokafka` нет prebuilt wheel'а для musl libc. Решение — `python:3.12-slim` (debian-based) во всех `app/*/Dockerfile`. Уже исправлено.
 
+### `terraform apply` падает: VM image requires `TrustedLaunch` security type
+Сообщение:
+```
+Error: The provided gallery image only supports creation of VMs and VM Scale Sets
+       with 'TrustedLaunch' security type.
+```
+Microsoft теперь создаёт Gen2 Ubuntu 22.04 LTS с TrustedLaunch по умолчанию, и Packer-образ это унаследовал. Решение — в блоке `azurerm_linux_virtual_machine.vms` добавить **два** аргумента:
+```hcl
+secure_boot_enabled = true
+vtpm_enabled        = true
+```
+Этого достаточно. **Не добавлять `security_type = "TrustedLaunch"`** — такого аргумента нет в `azurerm_linux_virtual_machine` (azurerm 4.x), TF упадёт с `Unsupported argument`.
+
 ### Healthcheck в compose говорит `unhealthy` на slim base
 `python:3.12-slim` не имеет ни `wget`, ни `curl`. Healthcheck использует Python urllib:
 ```yaml

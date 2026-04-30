@@ -261,9 +261,15 @@ resource "azurerm_linux_virtual_machine" "vms" {
     storage_account_type = "Premium_LRS"
   }
 
-  source_image_id = data.azurerm_shared_image_version.latest.id
+  # TrustedLaunch требуется Packer-образом (Microsoft теперь по умолчанию
+  # генерирует Gen2 Ubuntu 22.04 с TrustedLaunch). Двух флагов ниже достаточно —
+  # azurerm 4.x сам пометит VM как TrustedLaunch security type.
+  # NB: argument `security_type` НЕ существует в azurerm_linux_virtual_machine,
+  # не добавлять.
+  secure_boot_enabled = true
+  vtpm_enabled        = true
 
-  # source_image_reference block is removed as we always use the gallery image now.
+  source_image_id = data.azurerm_shared_image_version.latest.id
 }
 
 resource "azurerm_managed_disk" "disks" {
