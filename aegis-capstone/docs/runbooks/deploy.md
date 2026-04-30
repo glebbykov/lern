@@ -238,20 +238,94 @@ echo "az-app: $APP_IP"
 
 ---
 
-## Откат
+## Полная очистка (teardown)
+
+> ⚠️ Деструктивно. Сносит **всё**: VMs, managed disks с данными БД, RG/VNet/NSG, **а также Packer-артефакты** (gallery + image-version + managed image). Делать только когда работа завершена.
+
+### Шаг 1. Остановить compose на az-app (опционально)
+
+`terraform destroy` всё равно снесёт VM, но если хочется чистого down первым:
+```bash
+APP_IP=$(awk '/^az-app/{for(i=1;i<=NF;i++) if($i ~ /^ansible_host=/) print substr($i,14)}' \
+          /root/lern/aegis-capstone/ansible/inventory/hosts.ini)
+ssh -i ~/.ssh/id_ed25519 ansible_user@$APP_IP \
+  'cd /opt/aegis-app && docker compose down --volumes' 2>&1 | tail
+```
+Снимет 8 контейнеров + named volumes (`pgdata`, `redisdata`, `mongodata`).
+
+### Шаг 2. `terraform destroy` — основная масса
 
 ```bash
 cd /root/lern/aegis-capstone/terraform
-terraform destroy
+terraform destroy -auto-approve
 ```
 
-> ⚠️ Снесёт **все managed disks и данные БД** (нет `prevent_destroy`).
-> Compute Gallery / Packer-image останутся — они вне `terraform.tfstate`. Чтобы убрать всё:
-> ```bash
-> az group delete --name aegis-v4-az-r1 --yes --no-wait
-> az group delete --name aegis-v4-az-r2 --yes --no-wait
-> az group delete --name aegis-v4-az-r3 --yes --no-wait
-> ```
+Время: 5–10 минут. Уничтожит всё, что в `terraform.tfstate`:
+- 5 VM (`az-app/db/kafka/etcd/storage`)
+- managed disks + attachments (включая RAID 5 диски storage)
+- 3 NSG, 3 NIC, public IP `pip-app`
+- 3 VNet, 3 subnet, 6 peering объектов
+- 3 RG (`aegis-v4-az-r1/r2/r3`) — **частично**
+
+> ⚠️ **Важно:** `terraform destroy` может зависнуть/упасть на удалении `aegis-v4-az-r1`, потому что там лежат **не управляемые TF ресурсы** — Compute Gallery (`aegis_gallery`), image-definition (`aegis-ubuntu-base`), image-version (`1.0.<timestamp>`), managed image (`aegis-base-<timestamp>`). Это нормально — переходи к шагу 3.
+
+### Шаг 3. Удалить Packer-артефакты + дочистить RG
+
+После `terraform destroy` (даже если упал на RG r1) — удалить RG целиком через `az`:
+
+```bash
+SUB=7c020354-cb51-4f0a-8265-59d8fbbdc041
+
+# Удалить все 3 RG (--no-wait → возвращается мгновенно, удаление в фоне)
+az group delete --name aegis-v4-az-r1 --yes --no-wait
+az group delete --name aegis-v4-az-r2 --yes --no-wait
+az group delete --name aegis-v4-az-r3 --yes --no-wait
+
+# Подождать удаления (опционально, иначе billing продолжится фоново)
+for rg in aegis-v4-az-r1 aegis-v4-az-r2 aegis-v4-az-r3; do
+  echo -n "waiting for $rg... "
+  until ! az group show -n $rg --query name -o tsv 2>/dev/null; do sleep 15; done
+  echo "GONE"
+done
+
+# Финальная проверка
+az group list --query "[?starts_with(name, 'aegis')].{name:name,location:location}" -o table
+# Должно быть пусто.
+```
+
+### Шаг 4. Локальная очистка (опционально)
+
+Эти файлы пересоздаются при следующем `apply`, но если хочется чистого репо:
+
+```bash
+cd /root/lern/aegis-capstone
+
+# Локальный Terraform state и артефакты
+rm -f terraform/terraform.tfstate terraform/terraform.tfstate.backup
+rm -rf terraform/.generated/ terraform/.terraform/
+
+# Сгенерированный inventory (Terraform пересоздаст при следующем apply)
+rm -f ansible/inventory/hosts.ini ansible/inventory/host_vars/*.yml
+
+# Логи прогонов
+rm -f /tmp/tfapply*.log /tmp/tfdestroy.log /tmp/ansible.log /tmp/packer.log
+```
+
+> ⚠️ **`terraform.tfstate`** удалять нужно только если уверен, что в Azure точно ничего не осталось — иначе следующий `apply` будет считать, что инфры нет, и создаст дубль.
+
+### Что НЕ удаляется
+
+- `terraform.tfvars` (там твой `subscription_id` и `operator_ip` — пригодятся для следующего раза).
+- `~/.ssh/id_ed25519` — ключ оператора, не трогаем.
+- Локальные образы Packer plugins (`terraform/.terraform/providers/`) — переиспользуются.
+
+### Проверка биллинга
+
+После полного teardown в Azure-портале (Cost Management) убедиться, что:
+- Нет ресурсов с тегом `project=aegis`.
+- `Standard_D2s_v5` instances → 0.
+- Premium_LRS managed disks → 0.
+- Public IPs → 0.
 
 ---
 
