@@ -36,6 +36,12 @@ related:
 - [ ] SSH-ключ `~/.ssh/id_ed25519` (создать: `ssh-keygen -t ed25519`).
 - [ ] Свой публичный IP: `curl -s ifconfig.me`.
 - [ ] `az login` выполнен; `az account show` показывает нужную subscription.
+- [ ] **Resource providers зарегистрированы** (для свежей subscription это обязательно):
+  ```bash
+  az provider register --namespace Microsoft.Compute
+  az provider register --namespace Microsoft.Network
+  az provider register --namespace Microsoft.Storage
+  ```
 - [ ] Установлена Ansible-коллекция: `ansible-galaxy collection install community.general`.
 
 ---
@@ -393,3 +399,77 @@ test: ["CMD-SHELL", "python3 -c \"import urllib.request,sys; sys.exit(0 if urlli
 - `provision/azure_*.sh` — устаревшие bash-скрипты до-Terraform-эпохи. Не использовать.
 - `terraform/generate_tf.py` — удалён по [ADR-0005](../adr/0005-remove-generate-tf-py.md). Если появился снова — что-то пошло не так.
 - Папки с буквальными именами `${path.module}/`, `${var.ansible_host_vars_dir}/` в `terraform/` — мусор от старого бага, удалить.
+
+---
+
+## Quick redeploy: разворот в новой Azure-подписке
+
+Когда нужно поднять стек в свежем tenant'е (другой клиент, новый trial-аккаунт, переезд) — стек привязан к Azure-API, не к конкретному tenant. Меняются только три значения в `terraform.tfvars`.
+
+### 1. Собрать данные новой подписки
+
+```bash
+az login
+az account show --query id -o tsv          # → subscription_id
+curl -s ifconfig.me                        # → публичный IP оператора
+```
+
+Проверка quota на VM:
+```bash
+az vm list-usage --location southeastasia \
+  --query "[?contains(name.value, 'standardDSv5Family')]" -o table
+```
+Нужно **≥ 12 vCPU свободно** (5 VM × 2 vCPU + Packer build временно ещё 2 vCPU).
+
+### 2. Поправить `terraform/terraform.tfvars`
+
+```hcl
+azure_subscription_id = "<новый sub-id>"
+operator_ip           = "<новый public IP>/32"
+azure_vm_size         = "Standard_D2s_v5"
+azure_locations       = ["southeastasia", "australiasoutheast", "australiaeast"]
+```
+
+> **Больше нигде ничего не править.** Ни роли, ни сервисы, ни compose, ни Packer-конфиг.
+
+### 3. Прогнать пайплайн
+
+```bash
+# Шаг 2 runbook'а: создать RG + Gallery + image-def
+az group create --name aegis-v4-az-r1 --location southeastasia
+az sig create -g aegis-v4-az-r1 --gallery-name aegis_gallery
+az sig image-definition create -g aegis-v4-az-r1 --gallery-name aegis_gallery \
+  --gallery-image-definition aegis-ubuntu-base \
+  --publisher aegis --offer ubuntu --sku 22-04 --os-type Linux --hyper-v-generation V2
+
+# Шаг 3: Packer build (~12 минут)
+cd /root/lern/aegis-capstone/packer && packer init . && packer build ubuntu-base.pkr.hcl
+
+# Шаг 4: Terraform apply (~7 минут)
+cd /root/lern/aegis-capstone/terraform && terraform init && terraform apply -auto-approve
+
+# При первом apply упадёт с "r1 already exists" → один import + retry:
+terraform import azurerm_resource_group.r1 \
+  /subscriptions/<sub-id>/resourceGroups/aegis-v4-az-r1
+terraform apply -auto-approve
+
+# Шаг 6: Ansible (~15 минут)
+cd /root/lern/aegis-capstone/ansible && /root/.venv/bin/ansible-playbook -i inventory/hosts.ini site.yml
+
+# Шаг 8: Деплой сервисов (~3 минуты)
+cd /root/lern/aegis-capstone
+APP_IP=$(awk '/^az-app/{for(i=1;i<=NF;i++) if($i ~ /^ansible_host=/) print substr($i,14)}' \
+          ansible/inventory/hosts.ini)
+SSH="ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null"
+$SSH ansible_user@$APP_IP 'sudo mkdir -p /opt/aegis-app && sudo chown -R ansible_user:ansible_user /opt/aegis-app'
+rsync -avz -e "$SSH" --delete app/ ansible_user@$APP_IP:/opt/aegis-app/app/
+scp -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null \
+  docker-compose.yml ansible_user@$APP_IP:/opt/aegis-app/docker-compose.yml
+$SSH ansible_user@$APP_IP 'cd /opt/aegis-app && docker compose up -d --build'
+```
+
+**Итого ~40 минут от пустой подписки до работающего стека.**
+
+### 4. Если в новой подписке другой не-APAC регион
+
+`Standard_D2s_v5` доступен не везде. Если quota Asia-Pacific недоступна — выбрать любые 3 региона и положить в `azure_locations`. **Первый регион в списке должен совпадать с тем, где Packer создаёт RG `aegis-v4-az-r1`** (см. [§Шаг 2](#шаг-2-создать-rg--compute-gallery--image-definition-одноразово)) — это `southeastasia` по умолчанию в `packer/ubuntu-base.pkr.hcl`. Если хочешь другой регион — поправь `location` в pkr.hcl и `azure_locations[0]` синхронно.
