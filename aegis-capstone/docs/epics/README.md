@@ -12,6 +12,7 @@ last_verified: 2026-05-01
 | ID | Название | Status |
 |---|---|---|
 | [EP-001](EP-001-phase-3-stateful-tier.md) | Phase 3 — переезд stateful tier на az-db через WG overlay | Open |
+| [EP-002](EP-002-postgres-overlay.md) | PostgreSQL — переезд на az-db (PG-only подмножество EP-001) | Open |
 
 ## Формат
 
