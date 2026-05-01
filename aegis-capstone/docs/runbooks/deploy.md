@@ -389,6 +389,27 @@ terraform import azurerm_virtual_network_peering.p31 /subscriptions/<sub>/resour
 ### Docker compose: `ERROR: Failed building wheel for aiokafka` на alpine
 `python:3.12-alpine` не имеет `gcc`, а у `aiokafka` нет prebuilt wheel'а для musl libc. Решение — `python:3.12-slim` (debian-based) во всех `app/*/Dockerfile`. Уже исправлено.
 
+### Public IP назначен, но недоступен снаружи (timeout, не refused)
+Симптомы:
+- `terraform apply` зелёный, VM `Provisioning succeeded` + `PowerState: running`.
+- `az vm run-command` (управляющий канал Azure) работает изнутри VM.
+- `wg show wg0`, sshd внутри VM активен, NSG разрешает 0.0.0.0/0:22 — всё ок.
+- С локального клиента `ssh / curl` упирается в `Connection timed out` (не "refused").
+- Сама VM по hairpin-NAT успешно дотягивается до своего же public IP.
+
+Это не баг инфры — public IP получил blackhole-маршрут где-то между ISP оператора и Azure SEA-edge (наблюдалось 2026-05-01 на IP `20.212.9.146`). 
+
+**Что попробовать:**
+1. **Подождать 10-30 минут** — иногда маршрут появляется с задержкой.
+2. **Пересоздать public IP** через `terraform taint`:
+   ```bash
+   terraform taint 'azurerm_public_ip.app'
+   terraform apply
+   ```
+   ⚠️ Если NIC всё ещё прикреплён к работающей VM, replace может зависнуть на удалении NIC. Лучше: **destroy всю инфру и поднять заново** — получишь новый IP.
+3. **Тест с другого источника** (мобильный hotspot, VPN другого провайдера) — поможет определить, проблема глобальная или у конкретного маршрута. Если из другой сети `:22` отвечает — это transit-issue вашего ISP.
+4. **Использовать другой регион** для `r1` — если конкретный IP-блок Azure SEA проблематичен, regions `eastus`/`westeurope` обычно стабильнее.
+
 ### `terraform apply` падает: VM image requires `TrustedLaunch` security type
 Сообщение:
 ```
