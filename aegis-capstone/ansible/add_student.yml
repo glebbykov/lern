@@ -1,0 +1,24 @@
+- name: Add student user to all nodes
+  hosts: azure_nodes
+  become: true
+  tasks:
+    - name: Create tatiana user
+      user:
+        name: tatiana
+        shell: /bin/bash
+        groups: sudo,docker
+        append: yes
+        state: present
+
+    - name: Add passwordless sudo for tatiana
+      copy:
+        content: "tatiana ALL=(ALL) NOPASSWD:ALL"
+        dest: /etc/sudoers.d/tatiana
+        mode: '0440'
+        validate: 'visudo -cf %s'
+
+    - name: Set authorized key for tatiana
+      authorized_key:
+        user: tatiana
+        state: present
+        key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINZ/MYaszn3g+jjlX8ZqzHDOBLG4n2Ta+Cy6IduMxmy2 tatiana@astoriawinter"

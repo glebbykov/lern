@@ -77,37 +77,68 @@
 
 # Зачем: Ядро при загрузке должно знать, из каких дисков собирать RAID, чтобы примонтировать его.
 # Почему так: UUID фиксирует массив, иначе изменение порядка дисков при ребуте развалит RAID.
-- name: Сохранение конфигурации RAID
-  shell: mdadm --detail --scan >> /etc/mdadm/mdadm.conf
-  args:
-    executable: /bin/bash
-  register: mdadm_scan
-  changed_when: mdadm_scan.rc == 0
+- name: Получение конфигурации RAID
+  command: mdadm --detail --scan
+  register: mdadm_scan_output
+  changed_when: false
   when: aegis_raid_devices_final | length >= 3
-  # Не используем creates, так как мы хотим убедиться что запись там есть. 
-  # В идеале использовать lineinfile или template, но mdadm --scan надежнее для генерации строки.
+
+- name: Сохранение конфигурации RAID в /etc/mdadm/mdadm.conf
+  lineinfile:
+    path: /etc/mdadm/mdadm.conf
+    line: "{{ item }}"
+    state: present
+  loop: "{{ mdadm_scan_output.stdout_lines | default([]) }}"
+  when: 
+    - aegis_raid_devices_final | length >= 3
+    - mdadm_scan_output.stdout_lines | default([]) | length > 0
 
 # Зачем: Изолировать I/O для каждой базы данных (PostgreSQL, Mongo, Redis).
-# Почему так: LVM дает возможность онлайн-расширения (`vgextend`, `lvextend`) и создания снапшотов.
+# Почему так: Использование разделов вместо "сырых" дисков - best practice (защита от случайной перезаписи).
+- name: Создание разделов для LVM
+  community.general.parted:
+    device: "{{ item.dev }}"
+    number: 1
+    state: present
+    label: gpt
+    flags: [ lvm ]
+  loop: "{{ aegis_data_devices_final | selectattr('dev', 'defined') | list }}"
+  loop_control:
+    label: "Partitioning {{ item.dev }}"
+
+- name: Обновление списка устройств с учетом разделов
+  set_fact:
+    aegis_data_devices_partitioned: >-
+      {% set results = [] %}
+      {% for item in aegis_data_devices_final %}
+        {% if item.dev is defined %}
+          {% set suffix = 'p1' if 'nvme' in item.dev else '1' %}
+          {% set _ = results.append(item | combine({'pdev': item.dev + suffix})) %}
+        {% else %}
+          {% set _ = results.append(item) %}
+        {% endif %}
+      {% endfor %}
+      {{ results }}
+
+# Зачем: LVM дает возможность онлайн-расширения (`vgextend`, `lvextend`) и создания снапшотов.
 - name: Создание Volume Group на каждом выделенном диске
   community.general.lvg:
     vg: "vg_{{ item.name }}"
-    pvs: "{{ item.dev }}"
-  loop: "{{ aegis_data_devices_final | selectattr('dev', 'defined') | list }}"
+    pvs: "{{ item.pdev }}"
+  loop: "{{ aegis_data_devices_partitioned | selectattr('pdev', 'defined') | list }}"
   loop_control:
-    label: "{{ item.name }} → {{ item.dev }}"
+    label: "{{ item.name }} → {{ item.pdev }}"
 
 # Зачем: Утилизировать 100% выделенного диска под конкретную базу данных.
-# Почему так: `ignore_errors: yes` подавляет баг модуля `lvol`, который иногда падает при попытке расширить уже полный том.
+# Почему так: Удалено `ignore_errors: yes`, так как правильное использование модуля и проверка состояния делают это излишним.
 - name: Создание Logical Volume (100%FREE)
   community.general.lvol:
     vg: "vg_{{ item.name }}"
     lv: "lv_{{ item.name }}"
     size: 100%FREE
-  loop: "{{ aegis_data_devices_final | selectattr('dev', 'defined') | list }}"
+  loop: "{{ aegis_data_devices_partitioned | selectattr('pdev', 'defined') | list }}"
   loop_control:
     label: "lv_{{ item.name }}"
-  ignore_errors: yes
 
 # Зачем: Подготовить логические тома к записи данных.
 # Почему так: Тип ФС (ext4/xfs) задается динамически через host_vars в зависимости от профиля I/O базы.
@@ -115,7 +146,7 @@
   filesystem:
     fstype: "{{ item.fs }}"
     dev: "/dev/vg_{{ item.name }}/lv_{{ item.name }}"
-  loop: "{{ aegis_data_devices_final | selectattr('dev', 'defined') | list }}"
+  loop: "{{ aegis_data_devices_partitioned | selectattr('pdev', 'defined') | list }}"
   loop_control:
     label: "{{ item.fs }} on lv_{{ item.name }}"
 
@@ -125,7 +156,7 @@
   file:
     path: "{{ item.mount }}"
     state: directory
-  loop: "{{ aegis_data_devices_final | selectattr('dev', 'defined') | list }}"
+  loop: "{{ aegis_data_devices_partitioned | selectattr('pdev', 'defined') | list }}"
   loop_control:
     label: "{{ item.mount }}"
 
@@ -137,7 +168,7 @@
     src: "/dev/vg_{{ item.name }}/lv_{{ item.name }}"
     fstype: "{{ item.fs }}"
     state: mounted
-  loop: "{{ aegis_data_devices_final | selectattr('dev', 'defined') | list }}"
+  loop: "{{ aegis_data_devices_partitioned | selectattr('pdev', 'defined') | list }}"
   loop_control:
     label: "{{ item.mount }}"
 

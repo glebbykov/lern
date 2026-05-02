@@ -1,0 +1,32 @@
+- name: Deploy application
+  hosts: az-app
+  become: true
+  tasks:
+    - name: Create app directory
+      file:
+        path: /opt/aegis-app
+        state: directory
+        owner: ansible_user
+        group: ansible_user
+        mode: '0755'
+
+    - name: Synchronize app directory
+      synchronize:
+        src: ../app/
+        dest: /opt/aegis-app/app/
+        delete: yes
+        recursive: yes
+
+    - name: Copy docker-compose.yml
+      copy:
+        src: ../docker-compose.yml
+        dest: /opt/aegis-app/docker-compose.yml
+        owner: ansible_user
+        group: ansible_user
+        mode: '0644'
+
+    - name: Start docker compose
+      shell:
+        cmd: docker compose up -d --build
+        chdir: /opt/aegis-app
+      become: false
