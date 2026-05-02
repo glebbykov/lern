@@ -1,0 +1,353 @@
+# =============================================================================
+# Hello-CICD pipeline для Azure DevOps Server (on-prem)
+# =============================================================================
+#
+# Этот пайплайн делает следующее:
+#   1. CI               — прогоняет pytest (через step template)
+#   2. CD-Staging       — деплой в C:\app\hello-cicd, порт 8080 (auto на каждый push)
+#   3. Production       — деплой в C:\app\hello-cicd-prod, порт 8081 (только manual run + approval)
+#   4. Rollback         — восстанавливает staging из локального архива (по параметру)
+#
+# Подробная документация по каждому стейджу — в /selfhosted-labs/0X-*.md
+# =============================================================================
+
+
+# ─── PARAMETERS ───────────────────────────────────────────────────────────────
+# Параметры — это runtime-переменные, которые показываются в UI диалога "Run pipeline"
+# и могут быть переопределены при ручном запуске.
+#
+# ВАЖНО для on-prem: boolean parameters не работают через REST API queue request
+# (значения приходят пустыми). Используем string-параметр для rollback и
+# переменную Build.Reason для production-триггера.
+parameters:
+  - name: rollbackVersion
+    # Текст, который показывается над полем ввода в UI. Видишь при Run pipeline.
+    displayName: 'Rollback to BuildId (e.g. 14). Empty = normal deploy.'
+    type: string
+    # Пустое значение по умолчанию = обычный CI/CD флоу.
+    # Любое непустое = откат на указанный BuildId, CI и CD пропускаются.
+    default: ''
+
+
+# ─── TRIGGER ──────────────────────────────────────────────────────────────────
+# Когда автоматически запускать пайплайн без явного "Run".
+# Срабатывает на каждый push в указанные ветки, ЕСЛИ изменились файлы вне exclude-списка.
+#
+# Manual run (через UI кнопку "Run pipeline" или REST API queueBuild) триггер
+# игнорирует — manual всегда стартует.
+trigger:
+  branches:
+    include:
+      - main          # реагируем только на push в main, не на feature-ветки
+  paths:
+    exclude:
+      # ─── ВАЖНО ───
+      # На on-prem **НЕ работают глобы `**`** — молча игнорируются.
+      # Пиши имя папки без слешей и звёздочек. Это исключает папку рекурсивно.
+      - selfhosted-labs       # любые правки в /selfhosted-labs/* НЕ запускают билд
+      - templates/README.md   # отдельный файл (если бы был)
+      - README.md             # ройтовый readme (если бы был)
+
+
+# ─── POOL ─────────────────────────────────────────────────────────────────────
+# Где будут выполняться все задачи. У нас один self-hosted агент `my-agent` в
+# pool-е `self-hosted-pool`, на Windows VM ec2amaz-auoc24e.
+#
+# Если бы агентов было несколько, можно было бы добавить:
+#   demands:
+#     - python311
+#     - nssm
+# чтобы пайплайн брал только тех, у кого есть нужные capabilities.
+pool:
+  name: self-hosted-pool
+
+
+# ─── VARIABLES ────────────────────────────────────────────────────────────────
+# Глобальные переменные. Доступны во всех стейджах через $(name).
+variables:
+  # Подключаем variable group app-secrets — он содержит APP_SECRET_KEY (тип: secret).
+  # Сама группа лежит в Library: Lern-azure → Pipelines → Library → app-secrets.
+  # Авторизация для пайплайнов — Open access (см. лабу 02 для деталей).
+  - group: app-secrets
+
+  # Имя артефакта на билде. Пользователи скачивают его как один файл из вкладки Artifacts.
+  - name: artifactName
+    value: 'hello-cicd-app'
+
+  # Куда складывается долгоживущий rollback-архив на агенте.
+  # См. лабу 03 про why локальная папка вместо Universal Packages
+  # (тот не работает на on-prem).
+  - name: rollbackRoot
+    value: 'C:\artifacts\hello-cicd'
+
+
+# ─── STAGES ───────────────────────────────────────────────────────────────────
+# В Azure Pipelines стейджи запускаются последовательно (по dependsOn) или
+# параллельно (если dependsOn совпадает или отсутствует). Между стейджами
+# свежее окружение — каждый job начинается с чистой папки.
+stages:
+
+  # ─── STAGE 1: CI (Build & Test) ─────────────────────────────────────────────
+  # Прогоняет pytest. Если тесты упали — следующие стейджи Skipped автоматически
+  # (через dependsOn + condition: succeeded()).
+  #
+  # condition: ниже — это COMPILE-TIME выражение, ${{ }} подставляется при парсинге YAML.
+  # Если параметр rollbackVersion непустой — этот стейдж даже не попадает в план билда.
+  - stage: CI
+    displayName: 'Build and Test'
+    condition: eq('${{ parameters.rollbackVersion }}', '')
+    jobs:
+      - job: TestJob
+        displayName: 'Run Tests'
+        steps:
+          # Подключаем step template из /templates/python-test-steps.yml
+          # Шаги внутри template вставляются "как есть", словно мы написали их inline.
+          # Парсер раскрывает шаблон при компиляции YAML.
+          # Преимущество: 12 строк в template → 3 в основном пайплайне, можно переиспользовать.
+          # См. лабу 04 для деталей.
+          - template: templates/python-test-steps.yml
+            parameters:
+              testsPath: 'tests/'
+              # pythonVersion и requirementsFile берутся из дефолтов в template
+
+
+  # ─── STAGE 2: CD (Deploy to Staging) ────────────────────────────────────────
+  # Раскатывает приложение в staging-окружение C:\app\hello-cicd, порт 8080.
+  # Запускается только если CI прошёл успешно И не активен rollback.
+  - stage: CD
+    displayName: 'Deploy to Staging'
+    dependsOn: CI                 # ждём пока стейдж CI завершится
+    # condition: запускаем CD только если CI зелёный И не активен rollback
+    condition: and(succeeded(), eq('${{ parameters.rollbackVersion }}', ''))
+    jobs:
+      # `deployment:` (а не обычный `job:`) обязателен для интеграции с Environment.
+      # Это активирует Approval Gate'ы, capture deploy history, lifecycle hooks.
+      - deployment: deploy_staging
+        displayName: 'Deploy to staging'
+        # `environment:` — самое важное. Связывает job с named environment в DevOps.
+        # При первом запуске сервер просит однократный Permit-клик в UI (это разовая
+        # авторизация пайплайна на ресурс — НЕ approval, который мы добавили на production).
+        environment: staging
+        pool:
+          name: self-hosted-pool
+        # `strategy: runOnce` — простой "выкатить и забыть", без canary/rolling.
+        # Альтернативы: rolling (по N инстансов одновременно), canary (постепенный rollout с автоматическим failback).
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+
+                # ─── ШАГ 2.1: Скопировать сорцы и установить зависимости ───────
+                # `script:` на Windows — это cmd.exe, многострочный.
+                # `xcopy /E /I /Y` = recursive + create dest dir + overwrite without prompt
+                # `call .venv\Scripts\activate.bat` — `call` обязателен в cmd, иначе скрипт завершится в venv-режиме
+                - script: |
+                    xcopy /E /I /Y "$(Build.SourcesDirectory)" "C:\app\hello-cicd"
+                    cd C:\app\hello-cicd
+                    python -m venv .venv
+                    call .venv\Scripts\activate.bat
+                    pip install -r requirements.txt
+                    echo Deploy completed!
+                  displayName: 'Deploy app to staging server'
+
+                # ─── ШАГ 2.2: Проверка что secret из variable group реально доехал ─
+                # Маскирование на месте: если бы делали `echo %APP_SECRET_KEY%`, в логе
+                # было бы `***`. Через if-проверку видим только факт пустоты/непустоты.
+                # См. лабу 02 для подробностей про маскирование.
+                - script: |
+                    if "%APP_SECRET_KEY%"=="" (
+                      echo ERROR: APP_SECRET_KEY is empty
+                      exit /b 1
+                    )
+                    echo APP_SECRET_KEY is set
+                  displayName: 'Verify secret from variable group'
+                  # secret-переменная не доступна в скрипте автоматически — её надо явно
+                  # пробросить через env: блок. Иначе $(APP_SECRET_KEY) расширится в "***".
+                  env:
+                    APP_SECRET_KEY: $(APP_SECRET_KEY)
+
+                # ─── ШАГ 2.3: Создать zip-архив для будущего rollback ──────────
+                # ArchiveFiles@2 — встроенная такса, надёжнее чем `powershell Compress-Archive`.
+                # rootFolderOrFile — что архивировать
+                # includeRootFolder=false — не включать саму папку в zip, только её содержимое
+                #   (так распаковка кладёт файлы прямо в C:\app\hello-cicd, без вложенной папки)
+                - task: ArchiveFiles@2
+                  displayName: 'Archive deployed app'
+                  inputs:
+                    rootFolderOrFile: 'C:\app\hello-cicd'
+                    includeRootFolder: false
+                    archiveType: 'zip'
+                    archiveFile: '$(Build.ArtifactStagingDirectory)\app-$(Build.BuildId).zip'
+                    replaceExistingArchive: true
+
+                # ─── ШАГ 2.4: Сохранить архив в постоянное хранилище на агенте ─
+                # `Build.ArtifactStagingDirectory` живёт только в рамках билда — он чистится
+                # перед каждым новым запуском. Поэтому копируем в C:\artifacts\, где
+                # архивы лежат постоянно (никакой retention policy).
+                # См. лабу 03 для альтернатив (NuGet feed, MinIO, AWS S3).
+                - script: |
+                    if not exist "$(rollbackRoot)" mkdir "$(rollbackRoot)"
+                    copy /Y "$(Build.ArtifactStagingDirectory)\app-$(Build.BuildId).zip" "$(rollbackRoot)\app-$(Build.BuildId).zip"
+                    echo Rollback archive saved to $(rollbackRoot)\app-$(Build.BuildId).zip
+                    dir "$(rollbackRoot)"
+                  displayName: 'Save rollback archive on agent'
+
+                # ─── ШАГ 2.5: Опубликовать архив как Build Artifact в DevOps ────
+                # Это делает архив видимым во вкладке Artifacts на странице билда.
+                # Любой может скачать через UI или API без RDP-доступа.
+                # ВАЖНО для on-prem: используем PublishBuildArtifacts@1, НЕ PublishPipelineArtifact@1!
+                # Последний выдаёт ##[error]Pipeline Artifact Task is not supported in on-premises.
+                # См. лабу 01 для полного списка таких "ловушек".
+                - task: PublishBuildArtifacts@1
+                  displayName: 'Publish build artifact (visible in UI)'
+                  inputs:
+                    pathToPublish: '$(Build.ArtifactStagingDirectory)\app-$(Build.BuildId).zip'
+                    artifactName: '$(artifactName)'
+                    # Container = хранится на самом TFS-сервере. Альтернатива FilePath = на сетевой шаре.
+                    publishLocation: 'Container'
+
+
+  # ─── STAGE 3: Production (Manual + Approval) ────────────────────────────────
+  # Раскатывает приложение в prod-окружение C:\app\hello-cicd-prod, порт 8081.
+  #
+  # ⚠️  СТЕЙДЖ ЗАПУСКАЕТСЯ ТОЛЬКО ПРИ MANUAL RUN, не на push в main.
+  # Это сделано через `eq(variables['Build.Reason'], 'Manual')` — runtime-проверка.
+  #
+  # Build.Reason принимает:
+  #   - 'IndividualCI'  — push в main триггернул билд
+  #   - 'Manual'         — кто-то нажал Run pipeline в UI или дёрнул POST /builds через API
+  #   - 'PullRequest'    — PR validation
+  #   - 'Schedule'       — крон-триггер
+  #   - и другие — см. https://learn.microsoft.com/azure/devops/pipelines/build/variables
+  #
+  # Почему не runtime parameter (как boolean deployToProduction): на on-prem REST API не
+  # пробрасывает значения параметров в YAML compile-time выражения через templateParameters
+  # или parameters JSON. Build.Reason — встроенная переменная, всегда доступна, всегда работает.
+  # См. лабу 07 для подробной истории граблей.
+  - stage: Production
+    displayName: 'Deploy to Production (manual run only, requires approval)'
+    dependsOn: CD                  # сначала staging должен пройти, потом прод
+    # condition: production срабатывает только если staging зелёный, не rollback,
+    # и build запущен вручную (Build.Reason=Manual). На push в main Build.Reason=IndividualCI,
+    # поэтому Production будет Skipped автоматически.
+    # NB: внутри `and(...)` нельзя писать # комментарии — expression evaluator
+    # их не понимает и падает с "Unrecognized value: '#'".
+    condition: and(succeeded(), eq('${{ parameters.rollbackVersion }}', ''), eq(variables['Build.Reason'], 'Manual'))
+    jobs:
+      - deployment: deploy_production
+        displayName: 'Deploy to production'
+        # ↓↓↓ Из-за этой строки срабатывает Approval Gate.
+        # Environment 'production' (id=2) имеет attached check типа Approval с approver-ом
+        # Administrator. Когда стейдж дойдёт до агента, он сначала остановится на
+        # Checkpoint.Approval — будет видно в UI как "Waiting for review" с кнопкой "Review".
+        # Только после клика Approve (или PATCH /pipelines/approvals через REST API)
+        # стейдж пойдёт выполняться.
+        environment: production
+        pool:
+          name: self-hosted-pool
+        # Job-level variables — переопределяют ранее объявленные, видны только в этом job-е.
+        # Если завтра захочешь production на другой VM с другим путём — меняешь только тут.
+        variables:
+          - name: appFolder
+            value: 'C:\app\hello-cicd-prod'
+          - name: appPort
+            value: '8081'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                # ─── ШАГ 3.1: Деплой в production-папку ────────────────────────
+                # Принципиально то же самое что staging, но в другую папку.
+                # `$(appFolder)` подставляется из job-level variables.
+                - script: |
+                    if not exist "$(appFolder)" mkdir "$(appFolder)"
+                    xcopy /E /I /Y "$(Build.SourcesDirectory)" "$(appFolder)"
+                    cd "$(appFolder)"
+                    python -m venv .venv
+                    call .venv\Scripts\activate.bat
+                    pip install -r requirements.txt
+                    echo Production deploy completed (folder=$(appFolder), port=$(appPort))
+                  displayName: 'Deploy app to production folder'
+
+                # ─── ШАГ 3.2: Та же проверка секрета, теперь в проде ───────────
+                # Полезно — разные environment-ы могут иметь разные variable group-ы
+                # (например: app-secrets-prod с другим APP_SECRET_KEY).
+                - script: |
+                    if "%APP_SECRET_KEY%"=="" (
+                      echo ERROR: APP_SECRET_KEY is empty
+                      exit /b 1
+                    )
+                    echo APP_SECRET_KEY is set in production
+                  displayName: 'Verify secret in production'
+                  env:
+                    APP_SECRET_KEY: $(APP_SECRET_KEY)
+
+                # NB: для реального запуска сервиса нужны waitress + nssm (см. лабу 06).
+                # Сейчас деплой просто кладёт файлы и устанавливает зависимости —
+                # сам Flask наружу не слушает.
+
+
+  # ─── STAGE 4: Rollback (Conditional) ────────────────────────────────────────
+  # Восстанавливает staging из ранее сохранённого архива.
+  #
+  # Запускается только когда rollbackVersion непустой:
+  #   1. Заходишь в UI → Run pipeline
+  #   2. В поле "Rollback to BuildId" вводишь например `15`
+  #   3. CI и CD-стейджи Skipped (по condition выше)
+  #   4. Этот стейдж выполняется и распаковывает app-15.zip
+  #
+  # ВНИМАНИЕ: rollback **не** трогает production — только staging.
+  # Для production нужен отдельный аналогичный стейдж с environment: production.
+  - stage: Rollback
+    displayName: 'Rollback to BuildId ${{ parameters.rollbackVersion }}'
+    # Никакого dependsOn — этот стейдж независим от CI/CD.
+    # Если нужен rollback, всё остальное пропускается.
+    condition: ne('${{ parameters.rollbackVersion }}', '')
+    jobs:
+      - deployment: rollback_staging
+        displayName: 'Rollback staging'
+        environment: staging          # тот же environment, что и обычный staging-деплой
+        pool:
+          name: self-hosted-pool
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - script: |
+                    REM ── Проверяем, существует ли архив с указанным BuildId
+                    set ARCHIVE=$(rollbackRoot)\app-${{ parameters.rollbackVersion }}.zip
+                    if not exist "%ARCHIVE%" (
+                      echo ERROR: archive %ARCHIVE% not found
+                      echo Available archives:
+                      dir "$(rollbackRoot)"
+                      exit /b 1
+                    )
+                    echo Found archive: %ARCHIVE%
+
+                    REM ── Делаем backup текущей версии (на случай если откат тоже сломан)
+                    REM    Старый бэкап удаляем, чтобы не накапливалось.
+                    if exist C:\app\hello-cicd-prev rmdir /S /Q C:\app\hello-cicd-prev
+                    if exist C:\app\hello-cicd ren C:\app\hello-cicd hello-cicd-prev
+
+                    REM ── Распаковываем выбранную версию (PowerShell для Expand-Archive,
+                    REM    в cmd встроенного нет)
+                    powershell -Command "Expand-Archive -Path '%ARCHIVE%' -DestinationPath 'C:\app\hello-cicd' -Force"
+                    cd C:\app\hello-cicd
+
+                    REM ── venv мог не сохраниться в архиве (мы его исключили include_root=false),
+                    REM    поэтому пересоздаём
+                    if not exist .venv python -m venv .venv
+                    call .venv\Scripts\activate.bat
+                    pip install -r requirements.txt
+                    echo Rollback to BuildId ${{ parameters.rollbackVersion }} completed
+                  displayName: 'Restore from rollback archive'
+
+# =============================================================================
+# Конец YAML
+#
+# Дальнейшая работа:
+#   1. Лаба 06 — добавить waitress + nssm чтобы Flask реально запускался
+#   2. Лаба 05 — настроить branch policy на main (PR-флоу через UI)
+#   3. На production добавить rollback (сейчас откат только staging)
+#   4. Добавить smoke-test после деплоя как gate (curl /health → exit 1 если не отвечает)
+# =============================================================================
